@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video renderer</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.js"></script>
+<style>
+:root{--bg:#1B1A1F;--panel:#232229;--ink:#E7E2D8;--muted:#A39D92;--line:#38363F;--brass:#C8A96E}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 40px}
+h1{font:italic 500 2rem Georgia,serif;margin:0 0 4px} p{margin:0 0 14px;color:var(--muted)}
+.stage{background:#000;margin:0 auto;max-height:62vh;aspect-ratio:16/9;overflow:hidden;display:flex;justify-content:center}
+.stage canvas{height:100%!important;width:auto!important;max-width:100%;display:block}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:14px 0}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+select,input{font:inherit;padding:6px 8px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+input[type=range]{padding:0;accent-color:var(--brass)}
+button{font:inherit;cursor:pointer;border:1px solid var(--brass);background:transparent;color:var(--brass);border-radius:999px;padding:8px 20px;font-weight:600}
+.prog{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:12px} .prog i{display:block;height:100%;width:0;background:var(--brass)}
+#status{margin-top:8px} #note{color:var(--brass);font-size:13px;margin-top:6px} #result a{color:var(--brass);display:inline-block;margin-top:10px}
+small{color:var(--muted);font-size:12.5px;display:block;margin-top:18px;line-height:1.5}
+.hide{display:none}
+</style></head><body><main>
+<h1 id="title"></h1>
+<p>Video renderer. Uses the clip's saved look and actors. Keep this tab visible while it renders.</p>
+<div class="stage" id="stage"></div>
+<div class="row">
+  <label style="flex:1;min-width:200px">Preview position<input id="pv" type="range" min="0" max="1" step="0.001" value="0.1"></label><span id="pvt" style="color:var(--muted)"></span>
+</div>
+<div class="row">
+  <label>What<select id="what"><option value="full">Whole song</option><option value="custom">Custom section</option></select></label>
+  <span id="custom" style="display:none;gap:8px"><label>From<input id="t0" value="1:13" size="5"></label><label>To<input id="t1" value="1:53" size="5"></label></span>
+  <label>Format<select id="fmt">
+    <option value="h" data-tag="16x9">16:9 · 1920×1080 (YouTube, DistroVid)</option>
+    <option value="v" data-tag="9x16" selected>9:16 · 1080×1920 (Reels, Stories)</option>
+    <option value="f" data-tag="4x5">4:5 · 1080×1350 (Instagram feed)</option>
+    <option value="s" data-tag="1x1">1:1 · 1080×1080</option></select></label>
+  <label>Audio (optional)<input id="master" type="file" accept="audio/*"></label>
+  <button id="go">Render video</button>
+</div>
+<div class="prog"><i id="bar"></i></div>
+<div id="status">Ready.</div><div id="note"></div><div id="result"></div>
+<small>Audio: without a file, the video uses the preview audio embedded in this page. To use your master, choose the WAV/AIFF here. It must start at the same point as the MP3.<br>
+If your browser can't encode audio, the video comes out silent. Add the audio with: <code>ffmpeg -i video.mp4 -i master.wav -c:v copy -c:a aac -b:a 320k -shortest out.mp4</code></small>
+<div class="hide"><div id="controls"></div><div id="dots"></div><audio id="au"></audio></div>
+</main><script>
+__JS__
+</script></body></html>

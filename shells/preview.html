@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__ · preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E7E6EA; --panel:#F3F2F5; --ink:#24222A; --muted:#66626F; --line:#CFCCD6; --brass:#7D6232; --track:#C9C5D1;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){ --bg:#1B1A1F; --panel:#232229; --ink:#E7E2D8; --muted:#A39D92; --line:#38363F; --brass:#C8A96E; --track:#45424D; }
+}
+:root[data-theme="dark"]{ --bg:#1B1A1F; --panel:#232229; --ink:#E7E2D8; --muted:#A39D92; --line:#38363F; --brass:#C8A96E; --track:#45424D; }
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.45}
+main{max-width:1120px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin-bottom:12px}
+h1{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:500;font-size:clamp(1.6rem,3.4vw,2.3rem);margin:0;letter-spacing:.01em}
+header p{margin:0;color:var(--muted)}
+.stage{position:relative;border-radius:4px;overflow:hidden;background:#08080b;aspect-ratio:16/9}
+.stage canvas{display:block;width:100%!important;height:100%!important}
+.err{position:absolute;inset:0;display:grid;place-items:center;color:#bbb;padding:20px;text-align:center}
+.transport{display:flex;align-items:center;gap:12px;margin:12px 0 4px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:7px 16px}
+button.play{min-width:84px;border-color:var(--brass);color:var(--brass);font-weight:600}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:118px}
+input[type=range]{accent-color:var(--brass);width:100%}
+.scrub{flex:1}
+.readout{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 22px}
+.meter{font-size:13px;color:var(--muted)}
+.meter b{display:block;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{height:3px;background:var(--track);border-radius:2px;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--brass)}
+.dots{display:flex;gap:4px;margin-top:7px}
+.dots span{width:9px;height:9px;border-radius:50%;background:var(--track)}
+.dots span.on{background:var(--brass)}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+fieldset{border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:10px 14px 14px;margin:0}
+legend{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:1.25rem;padding:0 6px}
+.ctl{margin-top:10px}
+.ctl label{display:flex;justify-content:space-between;gap:8px;font-size:13.5px}
+.ctl output{color:var(--muted);font-variant-numeric:tabular-nums}
+.ctl small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+select{font:inherit;width:100%;margin-top:4px;padding:5px 8px;border-radius:4px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.export{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.export span{color:var(--muted);font-size:13px}
+textarea{width:100%;min-height:140px;margin-top:10px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:10px;display:none}
+@media (max-width:600px){.readout{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>__TITLE__</h1>
+    <p>__SUBTITLE__</p>
+  </header>
+  <div class="stage" id="stage" aria-label="Animated actors moving with the music"></div>
+  <div class="transport">
+    <button class="play" id="play">Play</button>
+    <span class="time" id="time">0:00.0</span>
+    <input class="scrub" id="scrub" type="range" min="0" max="600" step="0.01" value="0" aria-label="Position in section">
+  </div>
+  <div class="readout">
+    <div class="meter">Loudness<b id="mR">0.00</b><div class="bar"><i id="bR"></i></div></div>
+    <div class="meter">Brightness (timbre)<b id="mC">0.00</b><div class="bar"><i id="bC"></i></div></div>
+    <div class="meter">Noisiness<b id="mF">0.00</b><div class="bar"><i id="bF"></i></div></div>
+    <div class="meter">Count in bar<b id="mB">1 of 7</b><div class="dots" id="dots"></div></div>
+  </div>
+  <div class="controls" id="controls"></div>
+  <div class="export">
+    <button id="copy">Copy settings</button>
+    <span id="copied">These become this track's config for the final render.</span>
+  </div>
+  <textarea id="cfg" readonly aria-label="Settings as JSON"></textarea>
+  <audio id="au" preload="auto" src="__AUDIO__"></audio>
+</main>
+<script>
+__JS__
+</script>
+</body>
+</html>

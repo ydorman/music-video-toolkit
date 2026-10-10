@@ -1,0 +1,14 @@
+# generated
+build/
+vendor/
+__pycache__/
+*.pyc
+.DS_Store
+# audio stays out of git (size, rights): put files in clips/<clip>/audio/
+clips/*/audio/
+*.mp3
+*.wav
+*.aif
+*.aiff
+*.flac
+*.mp4
