@@ -2,16 +2,18 @@
 """Assemble a clip's preview page and renderer page from the engine + the clip's data.
 
 Inputs:  clips/<clip>/{track.json, choreography.json, look.json}, build/<clip>/features.json, build/<clip>/actors/*
-Outputs: build/<clip>/preview.html   (publishable artifact, < 16 MB, compressed audio)
+Outputs (in the project repo): build/<clip>/preview.html   (publishable artifact, < 16 MB, compressed audio)
          build/<clip>/renderer.html  (open locally in Chrome to render MP4s)
 
-Usage: python tools/build_pages.py clips/<clip> [--look path/to/look.json]
+Usage (from the project repo): python3 toolkit/tools/build_pages.py clips/<clip> [--look path/to/look.json]
 """
 import sys, os, json, base64, glob, subprocess, argparse, tempfile
 ap=argparse.ArgumentParser(); ap.add_argument('clip'); ap.add_argument('--look',default=None)
 ap.add_argument('--preview-kbps',type=int,default=128); ap.add_argument('--renderer-kbps',type=int,default=192); args=ap.parse_args()
 CLIP=os.path.abspath(args.clip); NAME=os.path.basename(CLIP.rstrip('/'))
-ROOT=os.path.dirname(os.path.dirname(CLIP)); B=os.path.join(ROOT,'build',NAME); E=os.path.join(ROOT,'engine'); SH=os.path.join(ROOT,'shells')
+TOOLKIT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT=os.path.dirname(os.path.dirname(CLIP))   # the project repo: <project>/clips/<clip>
+B=os.path.join(PROJECT,'build',NAME); E=os.path.join(TOOLKIT,'engine'); SH=os.path.join(TOOLKIT,'shells')
 J=lambda p: json.load(open(p))
 track=J(os.path.join(CLIP,'track.json')); choreo=J(os.path.join(CLIP,'choreography.json'))
 lookp=args.look or os.path.join(CLIP,'look.json'); look=J(lookp) if os.path.exists(lookp) else {}

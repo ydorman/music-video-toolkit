@@ -5,7 +5,7 @@ Output: build/<clip>/actors/a<N>.json (meta: skeleton, parts, per-actor cfg) + a
 Each actor is a MakeHuman body + hair/eyebrows/eyes, skinned to the MakeHuman default skeleton,
 plus a costume generated from MakeHuman's built-in fitting helpers. Only the 'robe' costume exists so far.
 
-Usage: python tools/build_actors.py clips/<clip>
+Usage (from the project repo): python3 toolkit/tools/build_actors.py clips/<clip>
 """
 import sys, os, json, csv, argparse
 import numpy as np

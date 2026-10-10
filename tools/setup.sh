@@ -2,7 +2,7 @@
 # One-time setup of the build environment (Claude's container or your Mac).
 # Installs Python deps, fetches makehuman-core (pinned) into vendor/, and JS libs used for headless tests.
 set -e
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.."   # the toolkit root (vendor/ lives here)
 PIP="pip install -q"
 python3 -c "import sys; sys.exit(0 if sys.prefix==sys.base_prefix else 1)" && PIP="pip install -q --break-system-packages" || true
 $PIP numpy librosa pillow

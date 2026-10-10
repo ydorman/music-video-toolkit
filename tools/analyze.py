@@ -5,14 +5,14 @@ Reads clips/<clip>/track.json, writes build/<clip>/features.json and prints a sh
 The beat grid is a straight line fitted through all detected beats (works for steady-tempo tracks).
 If the track drifts in tempo this needs a tempo map instead (not implemented yet).
 
-Usage: python tools/analyze.py clips/<clip>
+Usage (from the project repo): python3 toolkit/tools/analyze.py clips/<clip>
 """
 import sys, os, json, argparse
 import numpy as np, librosa
 
 ap=argparse.ArgumentParser(); ap.add_argument('clip'); ap.add_argument('--fps',type=int,default=30); args=ap.parse_args()
 CLIP=os.path.abspath(args.clip); NAME=os.path.basename(CLIP.rstrip('/'))
-ROOT=os.path.dirname(os.path.dirname(CLIP)); OUT=os.path.join(ROOT,'build',NAME); os.makedirs(OUT,exist_ok=True)
+PROJECT=os.path.dirname(os.path.dirname(CLIP)); OUT=os.path.join(PROJECT,'build',NAME); os.makedirs(OUT,exist_ok=True)
 T=json.load(open(os.path.join(CLIP,'track.json')))
 audio=os.path.join(CLIP,T['audio'])
 if not os.path.exists(audio): sys.exit(f"audio not found: {audio}  (put the file there; audio is not committed to git)")

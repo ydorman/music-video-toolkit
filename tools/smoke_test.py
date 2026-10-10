@@ -5,14 +5,17 @@ Renders a few preview frames to build/<clip>/smoke/*.png and reports page errors
 With --render, also renders a 1-second MP4 through the renderer page (VP9/Opus in headless Chromium;
 real Chrome produces H.264/AAC).
 
-Usage: python tools/smoke_test.py clips/<clip> [--times 2 30 90] [--render 80]
+Usage: python <toolkit>/tools/smoke_test.py clips/<clip> [--times 2 30 90] [--render 80] [--stills]
 """
 import asyncio, os, sys, argparse
 from playwright.async_api import async_playwright
 ap=argparse.ArgumentParser(); ap.add_argument('clip'); ap.add_argument('--times',nargs='*',type=float,default=[2,30,90])
-ap.add_argument('--render',type=float,default=None); args=ap.parse_args()
-CLIP=os.path.abspath(args.clip); NAME=os.path.basename(CLIP.rstrip('/')); ROOT=os.path.dirname(os.path.dirname(CLIP))
-B=os.path.join(ROOT,'build',NAME); V=os.path.join(ROOT,'vendor','js'); os.makedirs(os.path.join(B,'smoke'),exist_ok=True)
+ap.add_argument('--render',type=float,default=None)
+ap.add_argument('--stills',action='store_true',help='also save the frames as JPGs in clips/<clip>/stills/ (reference for future sessions)')
+args=ap.parse_args()
+CLIP=os.path.abspath(args.clip); NAME=os.path.basename(CLIP.rstrip('/')); PROJECT=os.path.dirname(os.path.dirname(CLIP))
+TOOLKIT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+B=os.path.join(PROJECT,'build',NAME); V=os.path.join(TOOLKIT,'vendor','js'); os.makedirs(os.path.join(B,'smoke'),exist_ok=True)
 GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']
 async def route(r):
     u=r.request.url
@@ -26,6 +29,10 @@ async def main():
         await pg.goto('file://'+os.path.join(B,'preview.html')); await pg.wait_for_timeout(3000)
         for t in args.times:
             await pg.evaluate(f"window.__renderAt({t})"); await pg.locator('#stage canvas').screenshot(path=os.path.join(B,'smoke',f'preview_{t:g}.png'))
+            if args.stills:
+                from PIL import Image
+                os.makedirs(os.path.join(CLIP,'stills'),exist_ok=True)
+                Image.open(os.path.join(B,'smoke',f'preview_{t:g}.png')).convert('RGB').save(os.path.join(CLIP,'stills',f't{int(round(t)):03d}s.jpg'),quality=88)
         if args.render is not None:
             ctx=await b.new_context(accept_downloads=True,viewport={'width':1200,'height':1000}); rp=await ctx.new_page(); rp.on('pageerror',lambda e:errs.append(str(e)))
             await rp.route('https://cdn.jsdelivr.net/**',route)
