@@ -1,65 +1,62 @@
 # Music Video Toolkit
 
-Audio-reactive 3D music videos, built per track from a few config files.
-The music drives the picture: a beat grid drives the choreography, loudness drives the light,
-timbre drives the color, noisiness drives the haze. Actors are real human bodies made with MakeHuman.
+Audio-reactive 3D music videos. The music drives the picture: a beat grid drives the choreography,
+loudness drives the light, timbre drives the color, noisiness drives the haze. Actors are real human
+bodies made with MakeHuman. Preview in the browser, render MP4s in Chrome on your own GPU.
 
-First clip: `clips/05-mr-gs-dance-at-seven`, seven robed dancers, 7/4.
+This repo is the **toolkit only**. Content lives in a separate **project repo** per album/project,
+which includes this toolkit as a git submodule pinned to a known version.
 
-## How it fits together
+## Two repos
 
 ```
-clips/<clip>/                 per-clip input (committed)
-  track.json                  title, audio file, meter, counts per bar, snippets, optional grid override
-  actors.csv                  who is on stage: body, hair, skin, costume, spot, movement quirks
-  choreography.json           positions, final pose, step pattern, formations
-  look.json                   the tuned settings (pasted from the preview's "Copy settings")
-  audio/                      the track (NOT committed)
+music-video-toolkit/            THIS REPO (generic, reusable)
+  tools/                        setup.sh, analyze.py, build_actors.py, build_pages.py, smoke_test.py
+  engine/                       browser engine (three.js r149): core, stage, actors, motion, preview, render
+  shells/                       HTML templates for the preview and renderer pages
+  templates/                    PROJECT.md, project.gitignore, clip-robed-dancers/ (a complete example clip config)
+  skill/music-video-toolkit/    SKILL.md: how Claude runs sessions
+  RUNBOOK.md                    the workflow, step by step
 
-tools/                        the pipeline (runs in Claude's container, or on a Mac with Python)
-  setup.sh                    one-time: librosa, makehuman-core (pinned), test libs
-  analyze.py                  audio -> build/<clip>/features.json (+ analysis_report.json)
-  build_actors.py             actors.csv -> build/<clip>/actors/ (MakeHuman bodies + costume)
-  build_pages.py              engine + clip data -> build/<clip>/preview.html, renderer.html
-  smoke_test.py               headless check: preview frames + a 1 s test render
-
-engine/                       the browser engine (three.js r149), concatenated in this order
-  core.js                     look <-> settings, sliders, helpers, beat position
-  stage.js                    renderer, camera, floor, backdrop, lights      <- per-clip looks / backgrounds go here
-  actors.js                   skinned MakeHuman actors, costume morphs, hanging sleeves
-  motion.js                   positions, steps, turns, leg IK, start/end, animate(t)
-  preview.js                  transport, live sliders, "Copy settings"
-  render.js                   offline frame-by-frame MP4 encoder (WebCodecs + mp4-muxer)
-
-shells/                       HTML templates for the two pages
-skill/music-video-toolkit/    SKILL.md: how Claude should run a clip session
-RUNBOOK.md                    the per-clip workflow, step by step
+<project>/                      A PROJECT REPO (one per album/project)
+  PROJECT.md                    context every session reads: tracks, shared visual identity, decisions
+  toolkit/                      git submodule -> music-video-toolkit (pinned commit)
+  clips/<NN-slug>/              per clip: track.json, actors.csv, choreography.json, look.json, stills/
+                                audio/ is local only (gitignored)
+  build/                        generated (gitignored)
 ```
 
-## Quick start (a new clip)
+## Start a new project repo
 
 ```bash
-bash tools/setup.sh                          # once per machine/container
-cp -r clips/05-mr-gs-dance-at-seven clips/06-new-track   # then edit the four config files
-cp ~/Music/06.mp3 clips/06-new-track/audio/
-python3 tools/analyze.py      clips/06-new-track
-python3 tools/build_actors.py clips/06-new-track
-python3 tools/build_pages.py  clips/06-new-track
-open build/06-new-track/renderer.html        # in Chrome
+mkdir my-album-videos && cd my-album-videos && git init -b main
+git submodule add https://github.com/ydorman/music-video-toolkit.git toolkit
+cp toolkit/templates/PROJECT.md . && cp toolkit/templates/project.gitignore .gitignore
+mkdir -p clips && cp -r toolkit/templates/clip-robed-dancers clips/01-first-track
+git add -A && git commit -m "New project"
 ```
 
-See RUNBOOK.md for the full loop (preview -> tune -> bake -> render).
+## Run a clip (from the project repo root)
+
+```bash
+bash toolkit/tools/setup.sh                        # once per machine/container
+python3 toolkit/tools/analyze.py      clips/01-first-track
+python3 toolkit/tools/build_actors.py clips/01-first-track
+python3 toolkit/tools/build_pages.py  clips/01-first-track   # -> build/01-first-track/preview.html, renderer.html
+```
+
+Upgrading the toolkit inside a project: `git -C toolkit pull origin main && git commit -am "Update toolkit"`.
+Every clip commit therefore records exactly which toolkit version built it.
 
 ## Requirements
 
-- Build: Python 3.10+, ffmpeg, git. `tools/setup.sh` installs the rest.
+- Build: Python 3.10+, ffmpeg, git. `toolkit/tools/setup.sh` installs the rest (into the toolkit's vendor/).
 - Render: a current Chrome (H.264 + AAC). Safari works for video; audio encoding may not be available there.
-- Preview pages and the renderer load three.js and mp4-muxer from cdn.jsdelivr.net.
+- The pages load three.js and mp4-muxer from cdn.jsdelivr.net.
 
 ## Third-party pieces and licences
 
-- makehuman-core (https://github.com/vidya-hub/makehuman-core, pinned in setup.sh): AGPL-3.0, a GUI-free packaging of MakeHuman.
-  Used as a build tool only; it is not shipped in the pages. Models exported from MakeHuman are, per the
+- makehuman-core (https://github.com/vidya-hub/makehuman-core, pinned in setup.sh): AGPL-3.0, a GUI-free packaging
+  of MakeHuman, used as a build tool only (not shipped in the pages). Models exported from MakeHuman are, per the
   MakeHuman project's licence FAQ, free to use (CC0); confirm before commercial release.
-- three.js r149 (MIT), mp4-muxer 5.1.3 (MIT), librosa (ISC).
-- Audio files are never committed.
+- three.js r149 (MIT), mp4-muxer 5.1.3 (MIT), librosa (ISC). Audio is never committed.
