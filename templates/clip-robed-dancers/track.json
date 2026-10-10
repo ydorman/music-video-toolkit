@@ -1,0 +1,12 @@
+{
+  "title": "Track title",
+  "slug": "short-name-for-video-files",
+  "audio": "audio/track.mp3",
+  "meter": "4/4",
+  "pulse_bpm": 120,
+  "counts_per_bar": 4,
+  "tempo_hint_bpm": 120,
+  "snippets": [
+    { "name": "instagram", "start": 60, "end": 100 }
+  ]
+}

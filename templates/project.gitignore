@@ -1,0 +1,10 @@
+build/
+__pycache__/
+.DS_Store
+clips/*/audio/
+*.mp3
+*.wav
+*.aif
+*.aiff
+*.flac
+*.mp4
