@@ -1,0 +1,8 @@
+actor,spot,gender,age,weight,muscle,height_m,african,asian,caucasian,hair,hair_tint,eyebrows,skin,costume,costume_color,lean_deg,reach,arm_offset_deg,sync_lag
+1,back-1,female,40,42,45,1.72,20,10,70,long01,#FFFFFF,eyebrow002,#CCA387,robe,#EBE4D6,2,0.92,-3,0.62
+2,back-2,male,45,51,54,1.83,40,10,50,short02,#D8D0C8,eyebrow007,#AD8063,robe,#E4E0D8,-1,0.97,2,0.15
+3,back-3,female,38,50,50,1.62,5,10,85,braid01,#FFFFFF,eyebrow003,#DBB89E,robe,#ECE3D0,1,1.0,4,0.88
+4,back-4,male,40,48,52,1.77,90,0,10,afro01,#FFFFFF,eyebrow009,#734D38,robe,#E6E4DF,-2,1.03,-2,0.4
+5,front-1,female,51,53,44,1.65,20,0,80,bob02,#9A5A3E,eyebrow004,#D1A88A,robe,#E9DFCD,0,0.98,1,0.27
+6,front-2,female,35,42,48,1.65,5,75,20,ponytail01,#FFFFFF,eyebrow005,#C29973,robe,#E3DED3,2,1.01,-4,0.0
+7,front-3,male,41,52,50,1.79,5,5,90,short04,#FFFFFF,eyebrow010,#E0BDA3,robe,#EDE6DA,-1,0.99,3,0.73

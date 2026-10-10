@@ -1,0 +1,21 @@
+{
+  "_doc": "Arm values: [raise to side, raise forward, elbow bend forward, elbow bend in-plane, palm twist] in degrees. 'left'/'right' as seen from the audience. head: [bow, tilt]. One position per bar (or per 2 bars, see look). step_pattern: one [x, z] step per bar, x = audience right, z = toward audience, cycled. Formations map actors.csv spots to [x, z] metres; 'compact' is used for portrait/square renders.",
+  "positions": [
+    { "name": "arms out",        "left": [86, 4, 8, 0, 0],       "right": [86, 4, 8, 0, 0],       "head": [0, 0] },
+    { "name": "forearms raised", "left": [86, 4, 0, 86, 60],     "right": [86, 4, 0, 86, 60],     "head": [-3, 0] },
+    { "name": "arms up",         "left": [164, 6, 6, 0, 60],     "right": [164, 6, 6, 0, 60],     "head": [-8, 0] },
+    { "name": "diagonal",        "left": [132, 6, 6, 0, 30],     "right": [42, 6, 6, 0, 0],       "head": [0, -9] },
+    { "name": "mirrored",        "left": [42, 6, 6, 0, 0],       "right": [132, 6, 6, 0, 30],     "head": [0, 9] },
+    { "name": "hands on chest",  "left": [22, 28, 118, -38, -40],"right": [22, 28, 118, -38, -40],"head": [6, 0] },
+    { "name": "arms low",        "left": [18, 24, 16, 0, 0],     "right": [18, 24, 16, 0, 0],     "head": [14, 0] }
+  ],
+  "final_pose": { "left": [10, 14, 8, 0, 0], "right": [10, 14, 8, 0, 0], "head": [24, 0] },
+  "step_pattern_name": "left,right,back,front",
+  "step_pattern": [[-1, 0], [1, 0], [0, -1], [0, 1]],
+  "formations": {
+    "wide":    { "back-1": [-2.25, -1.15], "back-2": [-0.75, -1.15], "back-3": [0.75, -1.15], "back-4": [2.25, -1.15],
+                 "front-1": [-1.5, 0.45], "front-2": [0, 0.45], "front-3": [1.5, 0.45] },
+    "compact": { "back-1": [-0.75, -1.55], "back-4": [0.75, -1.55], "back-2": [-1.5, -0.55], "front-2": [0, -0.55],
+                 "back-3": [1.5, -0.55], "front-1": [-0.75, 0.45], "front-3": [0.75, 0.45] }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "title": "Mr G's Dance at Seven",
+  "slug": "mr-g-dance",
+  "audio": "audio/05_Mr_G_s_Dance_at_Seven.mp3",
+  "meter": "7/4",
+  "pulse_bpm": 77,
+  "counts_per_bar": 7,
+  "tempo_hint_bpm": 154,
+  "snippets": [
+    { "name": "instagram", "start": 73, "end": 113 }
+  ],
+  "grid_override": {
+    "beat_period": 0.3895707339938762,
+    "beat_offset": -3.0431790823071765,
+    "bar_phase": 0,
+    "note": "Grid approved by ear on the 1:13 snippet; the offset also fixes which position/step comes first. Analysis alone picks bar_phase 2 for this track."
+  }
+}

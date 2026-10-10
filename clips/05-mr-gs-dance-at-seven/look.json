@@ -1,0 +1,19 @@
+{
+  "track": "Mr G's Dance at Seven",
+  "meter": "7/4",
+  "pulse_bpm": 77,
+  "mapping": {
+    "loudness->light": { "base": 0.62, "response": 0.2 },
+    "brightness->hue": { "dark": 30, "bright": 286, "tint": 0.78 },
+    "noisiness->haze": 0.41,
+    "bar->position": { "bars_per_position": 1, "transition": 0.69 },
+    "bar->step": { "size_m": 0.18, "pattern": "left,right,back,front" },
+    "turn_during_position": 1,
+    "start_end": { "fade_in_s": 6, "ending_starts_s": 148, "ending_length_s": 10 },
+    "robe": { "skirt_shape": 0.3, "sleeve_fullness": 0.36 },
+    "downbeat->dip": 0.28,
+    "sync_looseness_s": 0.125,
+    "downbeat_shift": 0,
+    "visual_offset_ms": 0
+  }
+}
