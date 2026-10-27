@@ -23,9 +23,33 @@ Decide together who is on stage, what they wear, how they move, the stage and li
 - `choreography.json`: positions (arm angles + head), final pose, step pattern, formations (`wide` for 16:9,
   `compact` for vertical/square). Spot names in actors.csv must exist in every formation.
 - `look.json`: start from a previous clip's, or `{}` for defaults.
+- `scene.json` (optional): the setting, the light per section and the camera shots. Without it you get the clip 05
+  studio (glowing backdrop, fixed camera). See "Sections, scenes and cameras" below.
 
 New capabilities (another costume, props, a background, new music mappings) are toolkit changes:
 make them in the toolkit repo, keep them generic, document them here, then update the submodule in the project.
+
+### Sections, scenes and cameras
+- **Sections** (`track.json` `sections`: `[{"name":"Intro","bars":2},{"name":"A","bars":4},...]`) are counted in bars
+  from bar 1 of the grid. The preview shows the current section and has a button to jump to each one. Anything
+  timed in scene.json can say `"at": "C"` (start of C), `"C+2"` (2 bars into C) or a time in seconds.
+  `accents` (optional) lists the accented counts within the bar, for the choreography.
+- **Environment**: `"environment": "studio"` (default) or `"jungle"`, a procedural rain forest (trunks, understory,
+  palms, canopy, vines, leaf litter, distant forest, sky, light shafts, mist, fireflies and dust). Its `jungle`
+  block sets the seed (a different seed = a different forest), clearing size/centre, trunk count, understory/canopy
+  density, canopy height, vines, fog and the sun's default direction. Plants are kept out of every camera's path.
+- **Light keyframes** (`light`): each entry holds from its `at` until the next and blends in over `blend` bars.
+  Jungle keys: `day` (0 night .. 1 full day), `sun` (direct sun and shafts), `shafts`, `sweep` (how far the sun
+  swings with the sound's brightness), `spread` (1 = shafts all over the clearing, small = one focused shaft),
+  `fireflies` (they sparkle on note onsets), `mist` (also thickens with noisier sound), `cool`, `warm`,
+  `elevation`/`azimuth` (sun direction, degrees). Loudness, fade-in and ending still come from look.json.
+  The preview's **Jungle** sliders scale these for the whole clip and are saved in look.json under `jungle`.
+- **Cameras** (`cameras`): one shot per entry, held until the next: `pos`, `look`, `fov` (vertical, 16:9), optional
+  `to` (where the shot ends), `path` `"line"` or `"arc"` (around the look point), `"cut": false` + `blend` (bars)
+  to blend from the previous shot instead of cutting. `camera_sway` (default 1) adds a slow handheld breath.
+  In the preview, Camera: Free lets you orbit (drag), pan (shift-drag) and zoom (scroll); **Copy camera shot**
+  copies the current view as a shot to paste into the chat. Portrait renders widen the view automatically
+  (a per-shot portrait framing is still to come).
 
 ## 2. Analyse
 `python3 toolkit/tools/analyze.py clips/<clip>` prints the pulse, grid fit, bar-phase scores, music start/end and
@@ -69,6 +93,7 @@ When you're happy with the renders:
 ## Known limits
 - Rendering is in the browser on your GPU; Claude's container has none (several seconds per frame there).
 - Choreography is a loop: positions cycle per bar, steps per bar, one optional turn; the start fade-in and the
-  ending bow/fade are the only section-aware behaviour.
+  ending bow/fade are the only section-aware movement (light and cameras follow the sections via scene.json).
 - Costumes: only `robe` (generated from MakeHuman's fitting helpers; a sash hides the waist seam).
-- Backgrounds: only the built-in glowing backdrop; the background designer is still to be built (engine/stage.js).
+- Backgrounds: the studio backdrop or the procedural jungle (engine/scene.js). More environments go there too.
+- The smoke test skips the web fonts (not reachable from the container), so its screenshots use fallback fonts.

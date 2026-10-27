@@ -61,6 +61,8 @@ function animate(t){
   const fin=P.fadeIn>0?ease(clamp((t-MS)/P.fadeIn)):(t>=MS?1:0);
   const outro=clamp((t-P.outStart)/Math.max(0.1,P.outLen)), oW=ease(clamp(outro*2.2)), oL=ease(outro);
   L*=fin*(1-oL);
+  if(ENV.update) ENV.update(t,{rms,cent,flat,low,onset,L,lightC,tintC,fin,oL});
+  else {
   backdrop.material.color.copy(lightC).multiplyScalar(0.42*L);
   back.color.copy(lightC); back.intensity=1.8*L;
   rimL.color.copy(lightC); rimR.color.copy(lightC); rimL.intensity=rimR.intensity=2.6*L;
@@ -68,6 +70,7 @@ function animate(t){
   fill.intensity=0.02+0.03*L;
   const bg=tintC.clone().multiplyScalar(0.012*L+0.003); scene.background.copy(bg); scene.fog.color.copy(bg);
   scene.fog.density=0.025+P.haze*(0.015+0.045*flat);
+  }
   // ---- dancers
   const pb0=beatPos(t), countInBar=Math.floor(((pb0%CPB)+CPB)%CPB);
   dancers.forEach(d=>{
@@ -129,6 +132,7 @@ function animate(t){
     if(d.robeMesh) d.robeMesh.morphTargetInfluences[0]=P.skirt;
     updateSleeves(d);
   });
+  cameraUpdate(t);
   renderer.render(scene,camera);
   return {rms,cent,flat,countInBar};
 }

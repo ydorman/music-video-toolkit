@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Assemble a clip's preview page and renderer page from the engine + the clip's data.
 
-Inputs:  clips/<clip>/{track.json, choreography.json, look.json}, build/<clip>/features.json, build/<clip>/actors/*
+Inputs:  clips/<clip>/{track.json, choreography.json, look.json, scene.json (optional)}, build/<clip>/features.json, build/<clip>/actors/*
 Outputs (in the project repo): build/<clip>/preview.html   (publishable artifact, < 16 MB, compressed audio)
          build/<clip>/renderer.html  (open locally in Chrome to render MP4s)
 
@@ -18,6 +18,7 @@ J=lambda p: json.load(open(p))
 track=J(os.path.join(CLIP,'track.json')); choreo=J(os.path.join(CLIP,'choreography.json'))
 lookp=args.look or os.path.join(CLIP,'look.json'); look=J(lookp) if os.path.exists(lookp) else {}
 feat=J(os.path.join(B,'features.json'))
+scenep=os.path.join(CLIP,'scene.json'); scene=J(scenep) if os.path.exists(scenep) else {}
 track.setdefault('snippets',[]); track.setdefault('slug',NAME)
 def uri(p): return 'data:image/png;base64,'+base64.b64encode(open(p,'rb').read()).decode()
 people=[]
@@ -30,15 +31,15 @@ def mp3(kbps):
     subprocess.run(['ffmpeg','-y','-loglevel','error','-i',os.path.join(CLIP,track['audio']),'-b:a',f'{kbps}k',out],check=True)
     return base64.b64encode(open(out,'rb').read()).decode()
 eng=lambda *fs: '\n'.join(open(os.path.join(E,f)).read() for f in fs)
-data=lambda: ('const TRACK='+json.dumps(track)+';\nconst CHOREO='+json.dumps(choreo)+';\nconst LOOK='+json.dumps(look)+';\nconst F='+json.dumps(feat,separators=(',',':'))+
+data=lambda: ('const TRACK='+json.dumps(track)+';\nconst CHOREO='+json.dumps(choreo)+';\nconst LOOK='+json.dumps(look)+';\nconst SCENE='+json.dumps(scene)+';\nconst F='+json.dumps(feat,separators=(',',':'))+
               ';\nconst PEOPLE_DATA='+json.dumps(people,separators=(',',':'))+';\n')
 sub=f"{track.get('meter','')} · pulse {track.get('pulse_bpm','')} bpm · {len(people)} actors"
 # preview
-js=data()+eng('core.js','stage.js','actors.js','motion.js','preview.js')
+js=data()+eng('core.js','stage.js','scene.js','actors.js','motion.js','preview.js')
 h=open(os.path.join(SH,'preview.html')).read().replace('__TITLE__',track['title']).replace('__SUBTITLE__',sub).replace('__JS__',js).replace('__AUDIO__','data:audio/mpeg;base64,'+mp3(args.preview_kbps))
 open(os.path.join(B,'preview.html'),'w').write(h); print('preview.html  %.1f MB'%(len(h)/1e6))
 if len(h)>16e6: print('WARNING: preview is over 16 MB, too big to publish; lower --preview-kbps')
 # renderer
-js=data()+'const EMBED_AUDIO="'+mp3(args.renderer_kbps)+'";\n'+eng('core.js','stage.js','actors.js','motion.js','render.js')
+js=data()+'const EMBED_AUDIO="'+mp3(args.renderer_kbps)+'";\n'+eng('core.js','stage.js','scene.js','actors.js','motion.js','render.js')
 h=open(os.path.join(SH,'renderer.html')).read().replace('__JS__',js)
 open(os.path.join(B,'renderer.html'),'w').write(h); print('renderer.html %.1f MB'%(len(h)/1e6))
