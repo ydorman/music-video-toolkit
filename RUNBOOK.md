@@ -40,7 +40,9 @@ make them in the toolkit repo, keep them generic, document them here, then updat
   palms, epiphytes, leafy vines, canopy, leaf litter, distant forest). A new setting = a new preset in
   `ENV_PRESETS` (engine/scene.js) plus its content generator, not a new editor.
   `settings` overrides the preset's parameters (jungle: seed (different seed = different forest), clearing size and
-  centre, trunks, understory, canopy, canopy height, vines, fog, default sun direction). `palette` sets the light
+  centre, trunks, understory, canopy, canopy height, vines, fog, default sun direction, `moonlight` (cool dappled
+  light that keeps night sections readable, fading out as day comes), `particle_count` (fireflies, spread through
+  the whole forest and dimmer with distance)). `palette` sets the light
   colours: `night`, `dawn`, `day` (blended by the day level), `haze` (tints the fog), `cool`, `warm`.
   The set is kept clear along the whole camera path (a corridor around the flight and the view ahead of the lens).
 - **Light keyframes** (`light`): each entry holds from its `at` until the next and blends in over `blend` bars.

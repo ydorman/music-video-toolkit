@@ -93,7 +93,7 @@ function cameraUpdate(t){
 const ENV={update:null};
 const ENV_PRESETS={
   jungle:{ settings:{forest:true, seed:7, clearing_m:[5.5,4.2], clearing_center:[0,-0.6], trunks:90, understory:1, canopy:1,
-                     canopy_height_m:15, vines:30, fog:0.03, sun_azimuth_deg:-25, sun_elevation_deg:52, ground:'forest floor', particles:'fireflies'},
+                     canopy_height_m:15, vines:30, fog:0.03, sun_azimuth_deg:-25, sun_elevation_deg:52, ground:'forest floor', particles:'fireflies', particle_count:700, moonlight:0.9},
            palette:{night:'#1f2a52', dawn:'#d09068', day:'#eee6c6', haze:'#30402c', cool:'#9fb4e0', warm:'#ffb062'} }
 };
 if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
@@ -236,7 +236,7 @@ if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
       pts=[0,0.25,0.5,0.75,1].map(u=>new THREE.Vector3(lerp(a.x,b.x,u),lerp(ya,yb,u)-sag*Math.sin(Math.PI*u),lerp(a.z,b.z,u))); }
     else { const l=rr(4,ya-1); pts=[0,0.33,0.66,1].map(u=>new THREE.Vector3(a.x+0.4*Math.sin(u*3+k),ya-l*u,a.z+0.4*Math.cos(u*2+k))); }
     if(pts.some(p=>blocked(p.x,p.y,p.z,0.3))) continue;
-    const curve=new THREE.CatmullRomCurve3(pts); vinePts.push([curve,rr(0.025,0.06)]);
+    const curve=new THREE.CatmullRomCurve3(pts); vinePts.push([curve,rr(0.045,0.09)]);
     const L=curve.getLength(); for(let u=0;u<L;u+=rr(0.25,0.5)){ const p=curve.getPointAt(u/L); addLeaf(pick([1,3]),p.x,p.y,p.z,R()*7,rr(-80,10)*D,rr(0.3,0.6)); }
   }
   // leaf litter on the ground
@@ -296,8 +296,10 @@ if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
   // fireflies (night) and dust motes (in the sun)
   function points(n,area,size,color){
     const pos=new Float32Array(n*3), ph=new Float32Array(n);
-    for(let k=0;k<n;k++){ const a=R()*7, e=Math.sqrt(R())*area; pos[k*3]=CX+Math.cos(a)*RX*e; pos[k*3+1]=rr(0.15,3.6); pos[k*3+2]=CZ+Math.sin(a)*RZ*e; ph[k]=R();
-      if(k%3===0&&pathPts.length){ const q=pick(pathPts); if(Math.hypot(q.x-CX,q.z-CZ)>RX){ pos[k*3]=q.x+rr(-4,4); pos[k*3+1]=rr(0.3,Math.max(1,q.y+2)); pos[k*3+2]=q.z+rr(-4,4); } } }
+    // area: radius in clearing units for the dense part; a third spread through the forest out past the camera path
+    const wide=Math.max(3,(maxR+6)/RX);
+    for(let k=0;k<n;k++){ const a=R()*7, e=(k%3===0)?lerp(1,wide,Math.pow(R(),0.8)):Math.sqrt(R())*area;
+      pos[k*3]=CX+Math.cos(a)*RX*e; pos[k*3+1]=rr(0.15,e>1.5?6:3.6); pos[k*3+2]=CZ+Math.sin(a)*RZ*e; ph[k]=R(); }
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('ph',new THREE.BufferAttribute(ph,1));
     const m=new THREE.ShaderMaterial({transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
       uniforms:{col:{value:new THREE.Color(color)}, op:{value:0}, time:{value:0}, size:{value:size}, spark:{value:0}, epoch:{value:0}, px:{value:1}},
@@ -307,11 +309,12 @@ if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
           float fl=0.5+0.5*sin(time*(1.5+ph*2.5)+ph*30.0); fl=pow(fl,3.0);
           float sp=step(0.72,h(ph*91.7+epoch))*spark;
           vA=clamp(fl*0.8+sp*1.4,0.0,1.6);
+          vec4 mv0=modelViewMatrix*vec4(p,1.0); vA*=exp(-max(0.0,-mv0.z-6.0)*0.06);
           vec4 mv=modelViewMatrix*vec4(p,1.0); gl_PointSize=size*px*(1.0+sp*0.8)/-mv.z; gl_Position=projectionMatrix*mv; }`,
       fragmentShader:`uniform vec3 col; uniform float op; varying float vA; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.0,d); a*=a; gl_FragColor=vec4(col*a*vA*op,1.0); }`});
     const p=new THREE.Points(g,m); p.frustumCulled=false; scene.add(p); return m;
   }
-  const flies=points(220,1.6,60,0xd8f070), dust=points(500,0.9,14,0xfff1d0);
+  const flies=points(J.particle_count||700,1.6,60,0xd8f070), dust=points(500,0.9,14,0xfff1d0);
   // the sun: a shadowed spot from high in the canopy gap, with a dappled-leaf pattern projected through it
   const [dc,dx]=canvas(512,512); dx.fillStyle='#fff'; dx.fillRect(0,0,512,512); dx.filter='blur(5px)';
   for(let k=0;k<160;k++){ dx.fillStyle=`rgba(0,0,0,${rr(0.55,0.95)})`; dx.beginPath(); dx.ellipse(rr(0,512),rr(0,512),rr(12,55),rr(6,26),R()*3,0,7); dx.fill(); }
@@ -340,15 +343,17 @@ if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
     const az=(k.azimuth+k.sweep*JP.sweep*(cs-0.5)*70+4*Math.sin(t*0.05))*D, el=k.elevation*D;
     _d.set(Math.sin(az)*Math.cos(el),Math.sin(el),-Math.cos(az)*Math.cos(el));   // toward the sun
     back.position.set(CX,0,CZ).addScaledVector(_d,30); back.target.position.set(CX+0.25*Math.sin(t*0.4),0,CZ+0.2*Math.cos(t*0.33));
-    back.color.copy(sunC); back.intensity=3.6*k.sun*L*(0.55+0.7*cs);
-    rimL.color.copy(sky); rimR.color.copy(sky).lerp(sunC,0.5); rimL.intensity=rimR.intensity=(0.55+1.5*day)*L;
-    front.color.copy(sky).lerp(new THREE.Color(0xffffff),0.3); front.intensity=(0.03+0.07*day)*L;
-    fill.color.copy(sky); fill.intensity=(0.04+0.2*day)*L; fill.groundColor.setRGB(0.1,0.085,0.06).multiplyScalar(L);
+    const moon=(J.moonlight??0.9)*clamp(1-day*1.6), sunI=3.6*k.sun*(0.55+0.7*cs);
+    back.color.copy(sunC).multiplyScalar(sunI).add(_c.copy(COOL).lerp(NIGHT,0.3).multiplyScalar(moon*2.6)); const bI=Math.max(0.0001,sunI+moon*2.6);
+    back.color.multiplyScalar(1/bI); back.intensity=bI*L;
+    rimL.color.copy(sky); rimR.color.copy(sky).lerp(sunC,0.5); rimL.intensity=rimR.intensity=(0.55+1.5*day+0.6*moon)*L;
+    front.color.copy(sky).lerp(new THREE.Color(0xffffff),0.3); front.intensity=(0.03+0.07*day+0.22*moon)*L;
+    fill.color.copy(sky); fill.intensity=(0.04+0.2*day+0.3*moon)*L; fill.groundColor.setRGB(0.1,0.085,0.06).multiplyScalar(L);
     // sky, fog, distant forest
-    const lv=(0.06+0.9*day)*L;
+    const lv=(0.06+0.9*day+0.12*moon)*L;
     skyMat.uniforms.top.value.copy(sky).multiplyScalar(0.35*lv); skyMat.uniforms.hor.value.copy(sky).multiplyScalar(0.8*lv);
     skyMat.uniforms.sunC.value.copy(sunC).multiplyScalar(k.sun*L*(0.4+0.6*cs)); skyMat.uniforms.sunDir.value.copy(_d);
-    const fogC=sky.clone().lerp(DAMP,0.45).multiplyScalar(0.035+0.3*lv); scene.background.copy(fogC); scene.fog.color.copy(fogC);
+    const fogC=sky.clone().lerp(DAMP,0.45).multiplyScalar(0.05+0.3*lv); scene.background.copy(fogC); scene.fog.color.copy(fogC);
     scene.fog.density=J.fog*(0.7+0.6*k.mist*JP.mist)+P.haze*0.02*a.flat;
     rings.forEach((m,i)=>m.material.color.copy(sky).multiplyScalar((0.04+0.03*i)*(0.2+lv)));
     // leaves glow when backlit
