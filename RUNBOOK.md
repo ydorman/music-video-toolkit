@@ -17,14 +17,29 @@ Decide together who is on stage, what they wear, how they move, the stage and li
   (e.g. the Instagram section), optional `grid_override` (see step 2).
 - `actors.csv`: one row per actor. Columns: actor, spot, gender, age (years), weight/muscle (0-100, 50 = average),
   height_m, african/asian/caucasian (MakeHuman blend, sums to 100), hair (short01-04, bob01-02, long01, braid01,
-  ponytail01, afro01), hair_tint (#FFFFFF = natural), eyebrows (eyebrow001-012), skin (hex), costume (robe),
-  costume_color (hex), lean_deg, reach (1.0 = exact), arm_offset_deg, sync_lag (0-1 share of the looseness slider).
+  ponytail01, afro01), hair_tint (#FFFFFF = natural), eyebrows (eyebrow001-012), skin (hex), costume (robe, trousers,
+  dress; see Costumes below), costume_color (hex), lean_deg, reach (1.0 = exact), arm_offset_deg, sync_lag (0-1 share of the looseness slider),
+  sash_color (optional hex; see Costumes).
   Edit in Numbers/Excel, export CSV, upload. Claude can also read .numbers files.
 - `choreography.json`: positions (arm angles + head), final pose, step pattern, formations (`wide` for 16:9,
   `compact` for vertical/square). Spot names in actors.csv must exist in every formation.
 - `look.json`: start from a previous clip's, or `{}` for defaults.
 - `scene.json` (optional): the setting, the light per section and the camera shots. Without it you get the clip 05
   studio (glowing backdrop, fixed camera). See "Sections, scenes and cameras" below.
+
+### Costumes
+Generated per actor from MakeHuman's fitting helpers (tights, skirt), skinned to the body; `costume_color` colours them.
+- `robe`: long robe with wide hanging sleeves and a sash (clip 05).
+- `trousers`: straight, relaxed trousers ending below the knee, with a fitted sash at the waist; bare chest.
+- `dress`: light slip dress: fitted bodice with a straight neckline and thin straps, a narrow sash at the natural
+  waist, and a skirt that follows the hips and ends above the knee.
+**Sash colours** (a storytelling tool): an actor with a `sash_color` always wears it. `choreography.json` `partners`
+lists who is paired with whom from each `at` (as in scene.json): `[{"at":"C","blend":2,"pairs":[["m2","w1"],...]}]`.
+The partner without a colour of their own takes on the other's over `blend` bars; an actor in no pair fades back to
+neutral (the lone one).
+The preview's **Costume** sliders (saved in look.json under `robe`): `skirt_shape` (flare), `sash_tint` (how strongly
+sashes show their colours, default 0.6), `skirt_swing` (the skirt of robes and dresses trails behind steps and flares
+out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe only).
 
 New capabilities (another costume, props, a background, new music mappings) are toolkit changes:
 make them in the toolkit repo, keep them generic, document them here, then update the submodule in the project.
@@ -107,6 +122,7 @@ When you're happy with the renders:
 - Rendering is in the browser on your GPU; Claude's container has none (several seconds per frame there).
 - Choreography is a loop: positions cycle per bar, steps per bar, one optional turn; the start fade-in and the
   ending bow/fade are the only section-aware movement (light and cameras follow the sections via scene.json).
-- Costumes: only `robe` (generated from MakeHuman's fitting helpers; a sash hides the waist seam).
+- Costumes: `robe`, `trousers`, `dress` (generated from MakeHuman's fitting helpers, not cloth-simulated: the skirt
+  swing is a morph driven by the hips' recent movement, so it shows most with quick steps and turns).
 - Backgrounds: the studio backdrop or an outdoor preset (so far the procedural jungle; engine/scene.js).
 - The smoke test skips the web fonts (not reachable from the container), so its screenshots use fallback fonts.

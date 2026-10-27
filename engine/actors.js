@@ -8,6 +8,7 @@ function makeSleeve(mat){
 }
 const _sA=new THREE.Vector3(),_sB=new THREE.Vector3(),_sC=new THREE.Vector3(),_ax=new THREE.Vector3(),_dn=new THREE.Vector3(),_sd=new THREE.Vector3(),_pp=new THREE.Vector3(),_G=new THREE.Vector3(0,-1,0);
 function updateSleeves(d){
+  if(!d.sleeves.length) return;   // only the robe has hanging sleeves
   ['L','R'].forEach((side,si)=>{
     const b=d.bones, sc=d.sc, mesh=d.sleeves[si];
     b['upperarm01.'+side].getWorldPosition(_sA); b['lowerarm01.'+side].getWorldPosition(_sB); b['wrist.'+side].getWorldPosition(_sC);
@@ -67,17 +68,20 @@ function buildPerson(data,i){
     g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(buf,p.pos[0],p.nv*3),3));
     const j8=new Uint8Array(buf,p.J[0],p.nv*4); g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(Uint16Array.from(j8),4));
     g.setAttribute('skinWeight',new THREE.BufferAttribute(new Uint8Array(buf,p.W[0],p.nv*4),4,true));
-    if(p.morph){ g.morphAttributes.position=[new THREE.BufferAttribute(new Float32Array(buf,p.morph[0],p.nv*3),3)]; g.morphTargetsRelative=true; }
+    // skirt morph targets: [0] flare, [1] [2] swing in x/z (1 m at the hem; older builds have no swing)
+    if(p.morph){ g.morphAttributes.position=[new THREE.BufferAttribute(new Float32Array(buf,p.morph[0],p.nv*3),3)]; g.morphTargetsRelative=true;
+      if(p.swing) [0,1].forEach(k=>g.morphAttributes.position.push(new THREE.BufferAttribute(new Float32Array(buf,p.swing[0]+k*p.nv*12,p.nv*3),3))); }
     if(p.uv) g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(buf,p.uv[0],p.nv*2),2));
     const idx=p.idx[1]==='uint16'?new Uint16Array(buf,p.idx[0],p.ni):new Uint32Array(buf,p.idx[0],p.ni);
     g.setIndex(new THREE.BufferAttribute(idx,1));
     g.computeVertexNormals();
-    const m=new THREE.SkinnedMesh(g,mats[p.name]); m.castShadow=true; m.receiveShadow=true; m.frustumCulled=false;
+    const m=new THREE.SkinnedMesh(g,mats[p.mat||p.name]); m.castShadow=true; m.receiveShadow=true; m.frustumCulled=false;
     if(p.morph){ m.updateMorphTargets(); m.morphTargetInfluences[0]=P.skirt; }
     group.add(m); m.bind(skeleton); meshes.push(m);
   });
   const rest={}; meta.bones.forEach(b=>rest[b.n]=new THREE.Vector3(...b.h));
-  return {group,bones:byName,skeleton,mats,rest,meta,robeMesh:meshes.find((x,k)=>meta.parts[k].name==='robe'),sleeves:['L','R'].map(()=>makeSleeve(mats.robe))};
+  const robe=(meta.cfg.costume||'robe')==='robe';
+  return {group,bones:byName,skeleton,mats,rest,meta,robeMesh:meshes.find((x,k)=>meta.parts[k].morph),sleeves:robe?['L','R'].map(()=>makeSleeve(mats.robe)):[]};
 }
 
 const dancers=[];

@@ -10,7 +10,7 @@ function lookToP(L){ const m=(L&&L.mapping)||{}, g=(o,k,d)=>(o&&o[k]!==undefined
     posBars:g(m['bar->position'],'bars_per_position',1), sharp:g(m['bar->position'],'transition',0.35),
     step:g(m['bar->step'],'size_m',0.18), turnPos:g(m,'turn_during_position',1),
     fadeIn:g(m.start_end,'fade_in_s',6), outStart:g(m.start_end,'ending_starts_s',F.ending_suggestion||F.duration-10), outLen:g(m.start_end,'ending_length_s',10),
-    skirt:g(m.robe,'skirt_shape',0.3), sleeve:g(m.robe,'sleeve_fullness',0.4),
+    skirt:g(m.robe,'skirt_shape',0.3), sleeve:g(m.robe,'sleeve_fullness',0.4), swing:g(m.robe,'skirt_swing',0), sashTint:g(m.robe,'sash_tint',0.6),
     accent:g(m,'downbeat->dip',0.5), loose:g(m,'sync_looseness_s',0.05),
     shift:g(m,'downbeat_shift',0), offsetMs:g(m,'visual_offset_ms',0),
     sDay:g(m.scene||m.jungle,'daylight',1), sShafts:g(m.scene||m.jungle,'shafts',1), sSweep:g(m.scene||m.jungle,'sweep',1),
@@ -21,7 +21,7 @@ function pToLook(){ return {track:TRACK.title, meter:TRACK.meter, pulse_bpm:TRAC
     "noisiness->haze":P.haze, "bar->position":{bars_per_position:P.posBars, transition:P.sharp},
     "bar->step":{size_m:P.step, pattern:CHOREO.step_pattern_name||'custom'}, turn_during_position:P.turnPos,
     start_end:{fade_in_s:P.fadeIn, ending_starts_s:P.outStart, ending_length_s:P.outLen},
-    robe:{skirt_shape:P.skirt, sleeve_fullness:P.sleeve}, "downbeat->dip":P.accent, sync_looseness_s:P.loose,
+    robe:{skirt_shape:P.skirt, sleeve_fullness:P.sleeve, skirt_swing:P.swing, sash_tint:P.sashTint}, "downbeat->dip":P.accent, sync_looseness_s:P.loose,
     downbeat_shift:P.shift, visual_offset_ms:P.offsetMs,
     ...(OUTDOOR?{scene:{daylight:P.sDay, shafts:P.sShafts, sweep:P.sSweep, foliage_glow:P.sGlow, mist:P.sMist, particles:P.sParticles, warmth:P.sWarm}}:{}) } }; }
 const P = lookToP(LOOK);
@@ -46,9 +46,11 @@ const GROUPS = [
     {k:'hueDark', label:'Hue when timbre is dark', min:0, max:360, step:1, fmt:v=>v+'°'},
     {k:'hueBright', label:'Hue when timbre is bright', min:0, max:360, step:1, fmt:v=>v+'°'},
     {k:'tint', label:'Tint on robes and light', min:0, max:1, step:0.01, hint:'0 keeps everything neutral'} ]},
-  { name:'Robe', items:[
+  { name:'Costume', items:[
     {k:'skirt', label:'Skirt shape', min:0, max:1, step:0.01, hint:'0 = straight and close to the legs, 1 = full A-line'},
-    {k:'sleeve', label:'Sleeve fullness', min:0, max:1, step:0.01, hint:'How much cloth hangs below the arm'} ]},
+    {k:'sashTint', label:'Sash colour', min:0, max:1, step:0.01, hint:'How strongly sashes take on the colours (sash_color, partners)'},
+    {k:'swing', label:'Skirt swing', min:0, max:2, step:0.01, hint:'The skirt trails behind steps and flares out on turns'},
+    {k:'sleeve', label:'Sleeve fullness', min:0, max:1, step:0.01, hint:'How much cloth hangs below the arm (robe)'} ]},
   { name:'Movement', items:[
     {k:'posBars', label:'Length of each position', options:[[1,'1 bar'],[2,'2 bars']]},
     {k:'sharp', label:'Transition length', min:0.08, max:1, step:0.01, hint:'Short = sudden and held, long = flowing'},

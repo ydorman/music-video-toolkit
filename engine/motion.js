@@ -49,6 +49,62 @@ function legIK(d,side,target,yawQ){
   aim(ft,toe,rf);
 }
 
+// per-dancer timing at time t: position slot, step, weight shift (cx, cz in metres) and turn (rot); a pure function of t
+function timing(i,t,oW){
+  const ti=t-LAG[i]*P.loose;
+  const pb=beatPos(ti);
+  const posLen=CPB*P.posBars, q=pb/posLen, slot=Math.floor(q), frac=q-slot;
+  const ci=((slot%NPOS)+NPOS)%NPOS, pi=(((slot-1)%NPOS)+NPOS)%NPOS;
+  const cur=SEQ[ci], prev=SEQ[pi];
+  const k=ease(clamp(frac/P.sharp));
+  const inBar=((pb%CPB)+CPB)%CPB; 
+  const dip=Math.exp(-inBar*1.6)*P.accent*(1-oW);
+  const bar=Math.floor(pb/CPB), bf=pb/CPB-bar;
+  const NS=STEPS.length, S0=STEPS[(((bar-1)%NS)+NS)%NS], S1=STEPS[((bar%NS)+NS)%NS];
+  const kl=ease(clamp(bf/0.16)), kt=ease(clamp((bf-0.1)/0.22)), kb=(kl+kt)/2;
+  const leadSide = S1[0]!==0 ? S1[0] : (bar%2?1:-1);
+  const st=P.step*(1-oW);
+  let rot=0;
+  const slotEnd=ti+(1-frac)*posLen*F.beat_period;
+  if(P.turnPos && ci===P.turnPos-1 && slotEnd<=P.outStart){ rot=2*Math.PI*ease(clamp((frac-0.04)/0.85)); }
+  const cx=lerp(S0[0],S1[0],kb)*st*0.5, cz=lerp(S0[1],S1[1],kb)*st*0.5;
+  return {ti,pb,posLen,frac,ci,cur,prev,k,dip,bar,bf,S0,S1,kl,kt,leadSide,st,rot,cx,cz};
+}
+const outroW=t=>ease(clamp(clamp((t-P.outStart)/Math.max(0.1,P.outLen))*2.2));
+// skirt swing: the hem trails where the hips were over the last ~0.4 s and flares out while turning
+// (sampled from timing() instead of simulated, so any frame renders the same when scrubbing or rendering)
+const SW_TAU=[0.05,0.1,0.16,0.23,0.31,0.4], SW_W=SW_TAU.map(x=>Math.exp(-x/0.14)), SW_SUM=SW_W.reduce((a,b)=>a+b,0);
+function skirtSwing(i,t,now){
+  let lx=0, lz=0;
+  SW_TAU.forEach((tau,j)=>{ const p=timing(i,t-tau,outroW(t-tau)); lx+=SW_W[j]*(p.cx-now.cx); lz+=SW_W[j]*(p.cz-now.cz); });
+  lx/=SW_SUM; lz/=SW_SUM;
+  const back=timing(i,t-0.08,outroW(t-0.08)); let w=now.rot-back.rot; if(w<0) w+=2*Math.PI;   // turned in the last 80 ms
+  const spin=clamp(w/(2*Math.PI*0.08)/1.5);   // 0..1 at 1.5 turns per second
+  // into the body's own frame (the skirt morphs are in bind space), scaled up: the cloth swings further than the hips move
+  const c=Math.cos(-now.rot), s=Math.sin(-now.rot), g=3.5*P.swing;
+  let x=(c*lx+s*lz)*g, z=(-s*lx+c*lz)*g; const L=Math.hypot(x,z), M=0.3; if(L>M){ x*=M/L; z*=M/L; }
+  const p1=timing(i,t-0.1,outroW(t-0.1)), speed=Math.hypot(now.cx-p1.cx,now.cz-p1.cz)/0.1;   // hip speed, m/s
+  return {x,z,flare:P.swing*(0.8*spin+0.5*clamp(speed/0.6))};
+}
+
+// sash colours: each actor with a sash_color (actors.csv) always wears it; choreography.json "partners" lists, from a
+// given time ("at", like scene.json), who is paired with whom; the other actor's sash blends to that colour over "blend"
+// bars, and an actor in no pair fades back to neutral (the lone one)
+const SASH_OWN=CFG.map(c=>c.sash?new THREE.Color(c.sash):null), SPOT_I={}; CFG.forEach((c,i)=>SPOT_I[c.spot]=i);
+const PARTNERS=(CHOREO.partners||[]).map(e=>{ const take=CFG.map(()=>null);
+    (e.pairs||[]).forEach(([a,b])=>{ const ia=SPOT_I[a], ib=SPOT_I[b]; if(ia===undefined||ib===undefined) return;
+      if(SASH_OWN[ib]&&!SASH_OWN[ia]) take[ia]=SASH_OWN[ib]; if(SASH_OWN[ia]&&!SASH_OWN[ib]) take[ib]=SASH_OWN[ia]; });
+    return {T:atTime(e.at), dur:(e.blend===undefined?2:e.blend)*CPB*F.beat_period, take}; }).sort((a,b)=>a.T-b.T);
+const _sc=new THREE.Color();
+function sashAt(i,t){                 // -> [colour, amount 0..1] or null; a pure function of t
+  if(SASH_OWN[i]) return [SASH_OWN[i],1];
+  let r=0,g=0,b=0,k=0;                 // colour premultiplied by its amount, so blending to and from neutral is linear
+  for(let j=0;j<PARTNERS.length;j++){ const e=PARTNERS[j]; if(t<e.T) break;
+    const end=j+1<PARTNERS.length?Math.min(t,PARTNERS[j+1].T):t, u=ease(clamp((end-e.T)/Math.max(1e-3,e.dur))), c=e.take[i];
+    r=lerp(r,c?c.r:0,u); g=lerp(g,c?c.g:0,u); b=lerp(b,c?c.b:0,u); k=lerp(k,c?1:0,u); }
+  return k>1e-3?[_sc.setRGB(r/k,g/k,b/k),k]:null;
+}
+
 let lastT=null;
 function animate(t){
   const rms=feat('rms',t), cent=feat('cent',t), flat=feat('flat',t), low=feat('low',t), onset=feat('onset',t);
@@ -75,26 +131,11 @@ function animate(t){
   const pb0=beatPos(t), countInBar=Math.floor(((pb0%CPB)+CPB)%CPB);
   dancers.forEach(d=>{
     d.robeMat.color.copy(d.robeBase).lerp(tintC,P.tint*0.25); d.mats.sash.color.copy(d.robeMat.color).multiplyScalar(0.86);
-    const ti=t-LAG[d.i]*P.loose;
-    const pb=beatPos(ti);
-    const posLen=CPB*P.posBars, q=pb/posLen, slot=Math.floor(q), frac=q-slot;
-    const ci=((slot%NPOS)+NPOS)%NPOS, pi=(((slot-1)%NPOS)+NPOS)%NPOS;
-    const cur=SEQ[ci], prev=SEQ[pi];
-    const k=ease(clamp(frac/P.sharp));
-    const inBar=((pb%CPB)+CPB)%CPB; 
-    const dip=Math.exp(-inBar*1.6)*P.accent*(1-oW);
-    const bar=Math.floor(pb/CPB), bf=pb/CPB-bar;
-    const NS=STEPS.length, S0=STEPS[(((bar-1)%NS)+NS)%NS], S1=STEPS[((bar%NS)+NS)%NS];
-    const kl=ease(clamp(bf/0.16)), kt=ease(clamp((bf-0.1)/0.22)), kb=(kl+kt)/2;
-    const leadSide = S1[0]!==0 ? S1[0] : (bar%2?1:-1);
-    const st=P.step*(1-oW);
-    let rot=0;
-    const slotEnd=ti+(1-frac)*posLen*F.beat_period;
-    if(P.turnPos && ci===P.turnPos-1 && slotEnd<=P.outStart){ rot=2*Math.PI*ease(clamp((frac-0.04)/0.85)); }
+    const sc=sashAt(d.i,t); if(sc) d.mats.sash.color.lerp(sc[0],sc[1]*P.sashTint);
+    const {ti,pb,posLen,frac,ci,cur,prev,k,dip,bar,bf,S0,S1,kl,kt,leadSide,st,rot,cx,cz}=timing(d.i,t,oW);
     const yawQ=new THREE.Quaternion().setFromAxisAngle(UPV,rot);
     // root: shift weight between the feet, dip on the downbeat, turn
     resetPose(d);
-    const cx=lerp(S0[0],S1[0],kb)*st*0.5, cz=lerp(S0[1],S1[1],kb)*st*0.5;
     const root=d.bones.root;
     root.position.set(d.rest.root.x+cx/d.sc, d.rest.root.y-(dip*0.045)/d.sc, d.rest.root.z+cz/d.sc);
     root.quaternion.copy(yawQ);
@@ -129,7 +170,9 @@ function animate(t){
     const xr=new THREE.Vector3(1,0,0).applyQuaternion(yawQ), zr=new THREE.Vector3(0,0,1).applyQuaternion(yawQ);
     rotWorld(d.bones.neck02,new THREE.Quaternion().setFromAxisAngle(xr,hb*0.5*D));
     rotWorld(d.bones.head,new THREE.Quaternion().setFromAxisAngle(xr,hb*0.5*D).multiply(new THREE.Quaternion().setFromAxisAngle(zr,-ht*D)));
-    if(d.robeMesh) d.robeMesh.morphTargetInfluences[0]=P.skirt;
+    if(d.robeMesh){ const mi=d.robeMesh.morphTargetInfluences;
+      if(mi.length>1 && P.swing>0){ const sw=skirtSwing(d.i,t,{cx,cz,rot}); mi[0]=clamp(P.skirt+sw.flare,0,1.6); mi[1]=sw.x/d.sc; mi[2]=sw.z/d.sc; }
+      else { mi[0]=P.skirt; if(mi.length>1) mi[1]=mi[2]=0; } }
     updateSleeves(d);
   });
   cameraUpdate(t);
