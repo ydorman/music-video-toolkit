@@ -187,7 +187,8 @@ for pi,P in enumerate(PEOPLE):
         hem=ank+0.55*(knee-ank)                                   # below the knee, well above the ankle
         LEGS=TORSO+['upperleg','lowerleg']
         lq=faces(tq_all,LEGS,hem,waist); lv=np.unique(lq)
-        vis=~(has(dom,LEGS)&(co[:,1]<waist-0.3)&(co[:,1]>hem+0.3))
+        # hide the body only where the trousers hug it (hips, thighs); the shins stay visible inside the open legs
+        vis=~(has(dom,LEGS)&(co[:,1]<waist-0.3)&(co[:,1]>knee-0.3))
         rc[lv,1]=np.clip(rc[lv,1],hem,waist)
         rc=smooth(rc,lq,lv,4)
         hips=lv[has(dom[lv],TORSO+['upperleg01'])]
@@ -222,7 +223,7 @@ for pi,P in enumerate(PEOPLE):
         hem=knee+0.6                                               # about 6 cm above the knee
         ybot=yw-0.3                                                # the bodice ends under the sash
         bq_=faces(tq_all,TORSO+['clavicle','shoulder'],ybot,ytop); bv=np.unique(bq_)
-        vis=~(has(dom,TORSO+['upperleg'])&(co[:,1]<ytop-0.5)&(co[:,1]>hem+0.3))
+        vis=~(has(dom,TORSO)&(co[:,1]<ytop-0.5))       # the thighs stay visible under the open skirt
         rc[bv,1]=np.clip(rc[bv,1],ybot,ytop)
         rc=smooth(rc,bq_,bv,2)
         # bridge the cleavage: the centre front strip of the bust gets more smoothing so the neckline doesn't dip
