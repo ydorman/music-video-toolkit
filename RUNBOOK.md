@@ -33,6 +33,8 @@ Generated per actor from MakeHuman's fitting helpers (tights, skirt), skinned to
 - `trousers`: straight, relaxed trousers ending below the knee, with a fitted sash at the waist; bare chest.
 - `dress`: light slip dress: fitted bodice with a straight neckline and thin straps, a narrow sash at the natural
   waist, and a skirt that follows the hips and ends above the knee.
+Hair: every actor gets a hair-coloured cap on the scalp under the hair (coloured from the hair texture and hair_tint),
+so heads don't look bald between the see-through hair cards when seen from above.
 **Sash colours** (a storytelling tool): an actor with a `sash_color` always wears it. `choreography.json` `partners`
 lists who is paired with whom from each `at` (as in scene.json): `[{"at":"C","blend":2,"pairs":[["m2","w1"],...]}]`.
 The partner without a colour of their own takes on the other's over `blend` bars; an actor in no pair fades back to

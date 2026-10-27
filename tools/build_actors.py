@@ -223,7 +223,7 @@ for pi,P in enumerate(PEOPLE):
         hem=knee+0.6                                               # about 6 cm above the knee
         ybot=yw-0.3                                                # the bodice ends under the sash
         bq_=faces(tq_all,TORSO+['clavicle','shoulder'],ybot,ytop); bv=np.unique(bq_)
-        vis=~(has(dom,TORSO)&(co[:,1]<ytop-0.5))       # the thighs stay visible under the open skirt
+        vis=~(has(dom,TORSO)&(co[:,1]<ytop-1.5))       # visible down into the neckline; the thighs stay visible under the open skirt
         rc[bv,1]=np.clip(rc[bv,1],ybot,ytop)
         rc=smooth(rc,bq_,bv,2)
         # bridge the cleavage: the centre front strip of the bust gets more smoothing so the neckline doesn't dip
@@ -275,6 +275,7 @@ for pi,P in enumerate(PEOPLE):
     for name,coords,qf,Jv,Wv,morphs,mat in garment: add_part(name,coords,qf,Jv,Wv,morphs=morphs,mat=mat)
     # proxies with UVs (unwelded per face corner)
     texs={}
+    scalp_rgb=None
     for obj,kind in [(hu.hairProxy,'hair'),(hu.eyebrowsProxy,'brows'),(hu.eyesProxy,'eyes')]:
         pobj=[x for x in hu.getProxyObjects() if x.proxy is obj][0]
         pm=pobj.mesh; pco=obj.getCoords().astype(np.float64)
@@ -290,10 +291,24 @@ for pi,P in enumerate(PEOPLE):
         add_part(kind,pco[vlist],qf,PJ[vlist],PW[vlist],uvl)
         tp=pobj.material.diffuseTexture
         im=Image.open(tp).convert('RGBA'); im.thumbnail((512 if kind=='hair' else 256,)*2); fn=f'a{pi}_{kind}.png'; im.save(os.path.join(OUT,fn),optimize=True); texs[kind]=fn
+        if kind=='hair':
+            # scalp cap: hair cards are see-through between strands, so from above the scalp shows as bare skin.
+            # Body faces covered by hair (hair lies along the vertex normal, above the eyes) get a hair-coloured cap.
+            eye_top=hu.eyesProxy.getCoords()[:,1].max()
+            head=BODY_V[has(dom[BODY_V],['head'])&(co[BODY_V,1]>eye_top+0.25)]
+            d=pco[None,:,:]-co[head][:,None,:]; along=(d*N[head][:,None,:]).sum(2)
+            perp=np.sqrt(np.maximum((d**2).sum(2)-along**2,0))
+            covered=np.zeros(len(co),bool); covered[head[((along>-0.1)&(along<2.5)&(perp<0.35)).any(1)]]=True
+            cap=bq[covered[bq].all(1)]
+            if len(cap):
+                px=np.asarray(Image.open(tp).convert('RGBA'),np.float64)/255; px=px[px[:,:,3]>0.5][:,:3]
+                lin=lambda c: np.where(c<=0.04045,c/12.92,((c+0.055)/1.055)**2.4)
+                scalp_rgb=(lin(px).mean(0)*lin(np.array(hx(P['cfg']['hair_tint'])))*0.75).tolist()
+                add_part('scalp',co+N*0.04,cap,J,W,mat='scalp')
     # skeleton
     bl=[dict(n=b.name,p=(bidx[b.parent.name] if b.parent else -1),h=[float(x) for x in tf(np.array([b.headPos],float))[0]]) for b in bones]
     # binary pack
-    blob=bytearray(); meta=dict(bones=bl,parts=[],skin=P['skin'],cfg=P['cfg'],textures=texs,hair=P['hair'],height=float(tf(co[np.unique(bq)])[:,1].max()))
+    blob=bytearray(); meta=dict(bones=bl,parts=[],skin=P['skin'],cfg=P['cfg'],textures=texs,scalp=scalp_rgb,hair=P['hair'],height=float(tf(co[np.unique(bq)])[:,1].max()))
     for p in parts:
         ent=dict(name=p['name'],mat=p['mat'],nv=len(p['pos']),ni=int(p['idx'].size))
         for key,arr in [('pos',p['pos']),('morph',p.get('morph')),('swing',p.get('swing')),('J',p['J']),('W',(p['W']*255+0.5).astype(np.uint8)),('uv',p['uv']),('idx',p['idx'].astype(np.uint16) if len(p['pos'])<65536 else p['idx'])]:

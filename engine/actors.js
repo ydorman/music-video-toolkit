@@ -61,6 +61,8 @@ function buildPerson(data,i){
     hair:new THREE.MeshStandardMaterial({map:loadTex(data.tex.hair), color:new THREE.Color(meta.cfg.hair_tint), alphaTest:0.3, side:THREE.DoubleSide, roughness:0.8}),
     brows:new THREE.MeshStandardMaterial({map:loadTex(data.tex.brows), alphaTest:0.4, transparent:false, roughness:0.9}),
     eyes:new THREE.MeshStandardMaterial({map:loadTex(data.tex.eyes), color:0x8a8a8a, roughness:0.45}),
+    // a hair-coloured cap on the scalp (linear rgb from the build), so the head doesn't look bald between hair strands
+    scalp:new THREE.MeshStandardMaterial({color:new THREE.Color().setRGB(...(meta.scalp||[0.05,0.04,0.03])), roughness:0.85}),
   };
   const meshes=[];
   meta.parts.forEach(p=>{
