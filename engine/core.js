@@ -13,8 +13,9 @@ function lookToP(L){ const m=(L&&L.mapping)||{}, g=(o,k,d)=>(o&&o[k]!==undefined
     skirt:g(m.robe,'skirt_shape',0.3), sleeve:g(m.robe,'sleeve_fullness',0.4),
     accent:g(m,'downbeat->dip',0.5), loose:g(m,'sync_looseness_s',0.05),
     shift:g(m,'downbeat_shift',0), offsetMs:g(m,'visual_offset_ms',0),
-    jDay:g(m.jungle,'daylight',1), jShafts:g(m.jungle,'shafts',1), jSweep:g(m.jungle,'sweep',1), jGlow:g(m.jungle,'leaf_glow',1),
-    jMist:g(m.jungle,'mist',1), jFlies:g(m.jungle,'fireflies',1), jWarm:g(m.jungle,'warmth',0) }; }
+    sDay:g(m.scene||m.jungle,'daylight',1), sShafts:g(m.scene||m.jungle,'shafts',1), sSweep:g(m.scene||m.jungle,'sweep',1),
+    sGlow:g(m.scene||m.jungle,'foliage_glow',g(m.jungle,'leaf_glow',1)), sMist:g(m.scene||m.jungle,'mist',1),
+    sParticles:g(m.scene||m.jungle,'particles',g(m.jungle,'fireflies',1)), sWarm:g(m.scene||m.jungle,'warmth',0) }; }
 function pToLook(){ return {track:TRACK.title, meter:TRACK.meter, pulse_bpm:TRACK.pulse_bpm, actors:PEOPLE_DATA.length, positions:CHOREO.positions.map(s=>s.name),
   mapping:{ "loudness->light":{base:P.dim, response:P.resp}, "brightness->hue":{dark:P.hueDark, bright:P.hueBright, tint:P.tint},
     "noisiness->haze":P.haze, "bar->position":{bars_per_position:P.posBars, transition:P.sharp},
@@ -22,20 +23,21 @@ function pToLook(){ return {track:TRACK.title, meter:TRACK.meter, pulse_bpm:TRAC
     start_end:{fade_in_s:P.fadeIn, ending_starts_s:P.outStart, ending_length_s:P.outLen},
     robe:{skirt_shape:P.skirt, sleeve_fullness:P.sleeve}, "downbeat->dip":P.accent, sync_looseness_s:P.loose,
     downbeat_shift:P.shift, visual_offset_ms:P.offsetMs,
-    ...(SCENE.environment==='jungle'?{jungle:{daylight:P.jDay, shafts:P.jShafts, sweep:P.jSweep, leaf_glow:P.jGlow, mist:P.jMist, fireflies:P.jFlies, warmth:P.jWarm}}:{}) } }; }
+    ...(OUTDOOR?{scene:{daylight:P.sDay, shafts:P.sShafts, sweep:P.sSweep, foliage_glow:P.sGlow, mist:P.sMist, particles:P.sParticles, warmth:P.sWarm}}:{}) } }; }
 const P = lookToP(LOOK);
 const CPB = TRACK.counts_per_bar||7;          // counts (detected pulses) per bar
 const fmtMS=v=>Math.floor(v/60)+':'+String((v%60).toFixed(1)).padStart(4,'0');
 
+const OUTDOOR=!!(SCENE.environment&&SCENE.environment!=='studio');
 const GROUPS = [
-  ...(SCENE.environment==='jungle'?[{ name:'Jungle', items:[
-    {k:'jDay', label:'Daylight', min:0, max:1.5, step:0.01, hint:'Scales the daylight of every section (scene.json light keyframes)'},
-    {k:'jShafts', label:'Light shafts', min:0, max:2, step:0.01},
-    {k:'jSweep', label:'Timbre → sun sweep', min:0, max:2, step:0.01, hint:'How far the sun and shafts swing with the sound\u2019s brightness'},
-    {k:'jGlow', label:'Backlit leaves', min:0, max:2.5, step:0.01},
-    {k:'jMist', label:'Mist', min:0, max:2, step:0.01},
-    {k:'jFlies', label:'Fireflies', min:0, max:2, step:0.01, hint:'They sparkle on note onsets'},
-    {k:'jWarm', label:'Sun warmth', min:-1, max:1, step:0.01} ]}]:[]),
+  ...(OUTDOOR?[{ name:'Scene', items:[
+    {k:'sDay', label:'Daylight', min:0, max:1.5, step:0.01, hint:'Scales the daylight of every section (scene.json light keyframes)'},
+    {k:'sShafts', label:'Light shafts', min:0, max:2, step:0.01},
+    {k:'sSweep', label:'Timbre → sun sweep', min:0, max:2, step:0.01, hint:'How far the sun and shafts swing with the sound\u2019s brightness'},
+    {k:'sGlow', label:'Backlit foliage', min:0, max:2.5, step:0.01},
+    {k:'sMist', label:'Mist', min:0, max:2, step:0.01},
+    {k:'sParticles', label:'Particles (fireflies)', min:0, max:2, step:0.01, hint:'They sparkle on note onsets'},
+    {k:'sWarm', label:'Sun warmth', min:-1, max:1, step:0.01} ]}]:[]),
   { name:'Light', items:[
     {k:'dim', label:'Base light', min:0.15, max:1, step:0.01, hint:'How dim the stage is overall'},
     {k:'resp', label:'Loudness → light', min:0, max:1, step:0.01, hint:'How much the light swells with loudness'},

@@ -28,8 +28,11 @@ stage.addEventListener('pointermove',e=>{ if(!drag) return; const dx=e.clientX-d
   camera.lookAt(freeT); if(frozen) animate(au.currentTime||0); });
 stage.addEventListener('wheel',e=>{ if(!CAM.free) return; e.preventDefault(); const off=camera.position.clone().sub(freeT).multiplyScalar(Math.exp(e.deltaY*0.001)); camera.position.copy(freeT).add(off); camera.lookAt(freeT); },{passive:false});
 document.getElementById('copyShot').onclick=async()=>{
-  const r=v=>+v.toFixed(2), sc=sectionAt(au.currentTime||0);
-  const shot={at:sc?(sc.bar?sc.name+'+'+sc.bar:sc.name):+(au.currentTime||0).toFixed(1), pos:camera.position.toArray().map(r), look:(CAM.free?freeT:(()=>{const d=new THREE.Vector3(); camera.getWorldDirection(d); return camera.position.clone().addScaledVector(d,5);})()).toArray().map(r), fov:r(camera.fov)};
+  const r=v=>+v.toFixed(2), t=au.currentTime||0, sc=sectionAt(t);
+  // where we are: section + bars into it (nearest quarter bar); seconds before the first section
+  let at=+t.toFixed(2);
+  if(sc&&t>=sc.t0){ const bars=Math.round((t-sc.t0)/(CPB*F.beat_period)*4)/4; at=bars>0?sc.name+'+'+bars:sc.name; }
+  const shot={at, t:+t.toFixed(2), pos:camera.position.toArray().map(r), look:(CAM.free?freeT:(()=>{const d=new THREE.Vector3(); camera.getWorldDirection(d); return camera.position.clone().addScaledVector(d,5);})()).toArray().map(r), fov:r(camera.fov)};
   cfgEl.value=JSON.stringify(shot); cfgEl.style.display='block';
   try{ await navigator.clipboard.writeText(cfgEl.value); document.getElementById('copied').textContent='Camera shot copied. Paste it into the chat with where it should go.'; }
   catch(e){ cfgEl.select(); document.getElementById('copied').textContent='Select the text below and copy it.'; }

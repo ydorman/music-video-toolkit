@@ -36,15 +36,27 @@ function rng(seed){ let a=seed>>>0; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=M
 
 // ---------- camera director
 const CAM={shots:[], free:false};
+// Shots: each entry holds until the next. "to" = where it ends (path "line" | "arc"); "cut": false + "blend" = blend in
+// from the previous shot. "glide": true = fly smoothly from this pose to the next entry's pose; consecutive glide
+// entries form one continuous flight (no stops at the waypoints, only at the start and end of the chain).
 (function(){
   const list=(SCENE.cameras||[]).map(s=>({...s, T:atTime(s.at)})).sort((a,b)=>a.T-b.T);
   const V=a=>new THREE.Vector3(...a);
   list.forEach((s,i)=>{ s.p0=V(s.pos); s.l0=V(s.look); s.f0=s.fov||34;
     const to=s.to||{}; s.p1=to.pos?V(to.pos):s.p0.clone(); s.l1=to.look?V(to.look):s.l0.clone(); s.f1=to.fov||s.f0;
-    s.T1=i+1<list.length?list[i+1].T:F.duration; });
+    s.T1=i+1<list.length?list[i+1].T:F.duration; s.next=s.glide&&i+1<list.length?list[i+1]:null; });
+  // tangents for the glide chains (zero at the ends of a chain, Catmull-Rom style inside)
+  list.forEach((s,i)=>{ const inside=i>0&&list[i-1].glide&&s.glide&&i+1<list.length;
+    if(inside){ const a=list[i-1], b=list[i+1], dt=b.T-a.T;
+      s.vp=b.p0.clone().sub(a.p0).divideScalar(dt); s.vl=b.l0.clone().sub(a.l0).divideScalar(dt); s.vf=(b.f0-a.f0)/dt; }
+    else { s.vp=new THREE.Vector3(); s.vl=new THREE.Vector3(); s.vf=0; } });
   CAM.shots=list;
 })();
+function hermite(a,b,va,vb,dt,u){ const u2=u*u,u3=u2*u; return a*(2*u3-3*u2+1)+va*dt*(u3-2*u2+u)+b*(-2*u3+3*u2)+vb*dt*(u3-u2); }
+function hermV(a,b,va,vb,dt,u){ return new THREE.Vector3(hermite(a.x,b.x,va.x,vb.x,dt,u),hermite(a.y,b.y,va.y,vb.y,dt,u),hermite(a.z,b.z,va.z,vb.z,dt,u)); }
 function shotState(s,t){
+  if(s.next){ const n=s.next, dt=Math.max(0.05,n.T-s.T), u=clamp((t-s.T)/dt);
+    return {pos:hermV(s.p0,n.p0,s.vp,n.vp,dt,u), look:hermV(s.l0,n.l0,s.vl,n.vl,dt,u), fov:hermite(s.f0,n.f0,s.vf,n.vf,dt,u)}; }
   const u=ease(clamp((t-s.T)/Math.max(0.1,s.T1-s.T))*0.999+0.0005);
   const look=s.l0.clone().lerp(s.l1,u), fov=lerp(s.f0,s.f1,u); let pos;
   if(s.path==='arc'){ // interpolate around the look point: angle, radius and height
@@ -55,12 +67,17 @@ function shotState(s,t){
   } else pos=s.p0.clone().lerp(s.p1,u);
   return {pos,look,fov};
 }
-function cameraUpdate(t){
-  if(CAM.free||!CAM.shots.length) return;
+function cameraState(t){            // pure function of t (no sway): used to render and to clear the set around the camera path
+  if(!CAM.shots.length) return null;
   let i=0; for(let k=0;k<CAM.shots.length;k++) if(t>=CAM.shots[k].T) i=k;
   const s=CAM.shots[i]; let st=shotState(s,t);
-  if(s.cut===false&&i>0){ const bl=(s.blend||1)*CPB*F.beat_period, k=ease(clamp((t-s.T)/bl));
+  if(s.cut===false&&i>0&&!CAM.shots[i-1].glide){ const bl=(s.blend||1)*CPB*F.beat_period, k=ease(clamp((t-s.T)/bl));
     if(k<1){ const p=shotState(CAM.shots[i-1],t); st={pos:p.pos.lerp(st.pos,k), look:p.look.lerp(st.look,k), fov:lerp(p.fov,st.fov,k)}; } }
+  return st;
+}
+function cameraUpdate(t){
+  if(CAM.free||!CAM.shots.length) return;
+  const st=cameraState(t);
   // a slow handheld breath, deterministic in t
   const sw=(SCENE.camera_sway===undefined?1:SCENE.camera_sway)*0.025;
   st.pos.x+=sw*Math.sin(t*0.37)+sw*0.5*Math.sin(t*0.91); st.pos.y+=sw*0.6*Math.sin(t*0.53+1);
@@ -70,22 +87,41 @@ function cameraUpdate(t){
 }
 
 // ---------- environment
+// Environments: 'studio' (default: the backdrop of clip 05) or an outdoor preset. An outdoor scene is generic (ground,
+// sky, fog, sun with dappled light, shafts, mist, particles, light keyframes, palette); a preset adds its content
+// (the forest for 'jungle') and its defaults. scene.json 'settings' and 'palette' override the preset.
 const ENV={update:null};
-if(SCENE.environment==='jungle') (function buildJungle(){
-  const J={seed:7, clearing_m:[5.5,4.2], clearing_center:[0,-0.6], trunks:90, understory:1, canopy:1, canopy_height_m:15, vines:30, fog:0.03,
-           sun_azimuth_deg:-25, sun_elevation_deg:52, ...(SCENE.jungle||{})};
+const ENV_PRESETS={
+  jungle:{ settings:{forest:true, seed:7, clearing_m:[5.5,4.2], clearing_center:[0,-0.6], trunks:90, understory:1, canopy:1,
+                     canopy_height_m:15, vines:30, fog:0.03, sun_azimuth_deg:-25, sun_elevation_deg:52, ground:'forest floor', particles:'fireflies'},
+           palette:{night:'#1f2a52', dawn:'#d09068', day:'#eee6c6', haze:'#30402c', cool:'#9fb4e0', warm:'#ffb062'} }
+};
+if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
+  const PRE=ENV_PRESETS[SCENE.environment]||ENV_PRESETS.jungle;
+  const J={...PRE.settings, ...(SCENE.jungle||{}), ...(SCENE.settings||{})};
+  const PAL={...PRE.palette, ...(SCENE.palette||{})};
   const R=rng(J.seed), rr=(a,b)=>a+(b-a)*R(), pick=a=>a[Math.floor(R()*a.length)];
   const CX=J.clearing_center[0], CZ=J.clearing_center[1], RX=J.clearing_m[0], RZ=J.clearing_m[1];
   const ell=(x,z)=>Math.hypot((x-CX)/RX,(z-CZ)/RZ);         // 1 = edge of the clearing
-  camera.far=140; camera.updateProjectionMatrix();
+  camera.far=300; camera.updateProjectionMatrix();
   backdrop.visible=false; floor.visible=false;
-  // keep camera paths clear of plants: a capsule from each camera position 3.5 m toward its look point
-  const keep=[]; CAM.shots.forEach(s=>[[s.p0,s.l0],[s.p1,s.l1]].forEach(([p,l])=>{ const d=l.clone().sub(p).normalize(); keep.push([p.clone(),p.clone().addScaledVector(d,3.5)]); }));
-  const blocked=(x,y,z,r)=>keep.some(([a,b])=>{ const ab=b.clone().sub(a), ap=new THREE.Vector3(x,y,z).sub(a); const k=clamp(ap.dot(ab)/ab.lengthSq());
-    return a.clone().addScaledVector(ab,k).distanceTo(new THREE.Vector3(x,y,z))<r+1.0; });
+  // keep the whole camera path clear: a corridor along the flight plus the view 3.5 m ahead of the lens
+  const keep=[], pathPts=[]; let prevP=null, maxR=0;
+  for(let t=0,n=0;t<=F.duration;t+=0.4,n++){ const st=cameraState(t); if(!st) break; const p=st.pos; pathPts.push(p);
+    maxR=Math.max(maxR,Math.hypot(p.x-CX,p.z-CZ));
+    if(prevP&&prevP.distanceTo(p)<3) keep.push([prevP.x,prevP.y,prevP.z,p.x,p.y,p.z]);
+    if(n%4===0){ const d=st.look.clone().sub(p).normalize(); keep.push([p.x,p.y,p.z,p.x+d.x*3.5,p.y+d.y*3.5,p.z+d.z*3.5]); }
+    prevP=p; }
+  function blocked(x,y,z,r){ const rr2=(r+1.0)*(r+1.0);
+    for(const k of keep){ const abx=k[3]-k[0],aby=k[4]-k[1],abz=k[5]-k[2], L=abx*abx+aby*aby+abz*abz||1e-9;
+      let u=((x-k[0])*abx+(y-k[1])*aby+(z-k[2])*abz)/L; u=u<0?0:u>1?1:u;
+      const dx=x-k[0]-abx*u, dy=y-k[1]-aby*u, dz=z-k[2]-abz*u; if(dx*dx+dy*dy+dz*dz<rr2) return true; }
+    return false; }
+  const blockedCol=(x,z,h,r)=>{ for(let y=0.4;y<=h;y+=1.0) if(blocked(x,y,z,r)) return true; return false; };
   const tex=(c,rep)=>{ const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; t.anisotropy=4; if(rep){ t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rep,rep);} return t; };
   const canvas=(w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return [c,c.getContext('2d')]; };
 
+  const FOREST=J.forest?(function growForest(){
   // ---- leaf atlas: 2x2 cells (broad, split, palm, fern); base at the bottom of each cell
   const [lc,lx]=canvas(1024,1024);
   function cell(i,fn){ lx.save(); lx.translate((i%2)*512,Math.floor(i/2)*512); fn(lx); lx.restore(); }
@@ -167,7 +203,7 @@ if(SCENE.environment==='jungle') (function buildJungle(){
   }
   for(let k=0,n=0;k<J.trunks*4&&n<J.trunks;k++){
     const a=R()*Math.PI*2, e=1.25+Math.pow(R(),1.3)*6, x=CX+Math.cos(a)*RX*e, z=CZ+Math.sin(a)*RZ*e;
-    if(blocked(x,1.5,z,0.8)) continue; if(trunks.some(t=>Math.hypot(t.bx-x,t.bz-z)<1.6)) continue;
+    if(blockedCol(x,z,J.canopy_height_m*1.35,0.8)) continue; if(trunks.some(t=>Math.hypot(t.bx-x,t.bz-z)<1.6)) continue;
     const big=R()<0.25; trunk(x,z,J.canopy_height_m*rr(0.75,1.35),big?rr(0.45,0.8):rr(0.12,0.35),rr(0,0.08),R()*7); n++;
   }
   // canopy: leaf clusters at trunk tops and mid-height epiphytes; a roof with a gap over the clearing
@@ -184,7 +220,7 @@ if(SCENE.environment==='jungle') (function buildJungle(){
   const mid=Math.round(55*J.understory);
   for(let k=0;k<mid;k++){
     const a=R()*7, e=1.1+Math.pow(R(),1.2)*4, x=CX+Math.cos(a)*RX*e, z=CZ+Math.sin(a)*RZ*e, h=rr(2.2,6.5);
-    if(blocked(x,h*0.5,z,1.2)) continue;
+    if(blockedCol(x,z,h+0.5,1.2)) continue;
     trunk(x,z,h,rr(0.05,0.1),rr(0,0.12),R()*7); trunks.pop();
     const palm=R()<0.6, n=palm?Math.round(rr(9,15)):Math.round(rr(5,9));
     for(let j=0;j<n;j++) addLeaf(palm?2:pick([0,1]),x,h+rr(-0.4,0.1),z,j/n*7+rr(-0.2,0.2),rr(-15,40)*D,palm?rr(1.8,3.2):rr(1.0,1.9));
@@ -219,18 +255,20 @@ if(SCENE.environment==='jungle') (function buildJungle(){
   // vines: hanging lianas between trunks or straight down
   const vineMat=new THREE.MeshStandardMaterial({color:0x2d2a1c, roughness:0.9});
   vinePts.forEach(([c,r])=>scene.add(new THREE.Mesh(new THREE.TubeGeometry(c,24,r,5,false),vineMat)));
+  return {leafMat};
+  })():null;
   // ground: dark soil and moss
   const [gc,gx]=canvas(1024,1024); gx.fillStyle='#2a2318'; gx.fillRect(0,0,1024,1024);
   for(let k=0;k<5000;k++){ const m=R()<0.35; gx.fillStyle=m?`rgba(${rr(40,70)|0},${rr(60,90)|0},${rr(25,40)|0},${rr(0.1,0.35)})`:`rgba(${rr(20,60)|0},${rr(15,45)|0},${rr(8,30)|0},${rr(0.15,0.4)})`;
     gx.beginPath(); gx.ellipse(rr(0,1024),rr(0,1024),rr(2,30),rr(2,20),R()*3,0,7); gx.fill(); }
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(160,160),new THREE.MeshStandardMaterial({map:tex(gc,22), color:0xaaa090, roughness:0.92}));
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(300,300),new THREE.MeshStandardMaterial({map:tex(gc,22), color:0xaaa090, roughness:0.92}));
   ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
   // distant forest: rings of painted silhouettes that sink into the haze
   const [sc,sx]=canvas(2048,512);
   for(let k=0;k<70;k++){ const x=rr(0,2048), w=rr(6,26); sx.fillStyle='#fff'; sx.fillRect(x,rr(0,120),w,512); }
   for(let k=0;k<420;k++){ sx.fillStyle='#fff'; sx.beginPath(); sx.ellipse(rr(0,2048),rr(0,260)+(R()<0.3?rr(150,330):0),rr(20,90),rr(14,50),R()*3,0,7); sx.fill(); }
   const silTex=tex(sc); silTex.wrapS=THREE.RepeatWrapping;
-  const rings=[[30,26,0x14180f],[40,34,0x1a1f15],[52,44,0x20261b]].map(([r,h,c],i)=>{
+  const RB=Math.max(30,maxR+8), rings=[[RB,26,0x14180f],[RB*1.33,34,0x1a1f15],[RB*1.73,44,0x20261b]].map(([r,h,c],i)=>{
     const t=silTex.clone(); t.needsUpdate=true; t.repeat.set(3+i,1); t.offset.x=i*0.37;
     const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,48,1,true),new THREE.MeshBasicMaterial({map:t, alphaTest:0.5, color:c, side:THREE.DoubleSide}));
     m.position.set(CX,h/2-0.5,CZ); scene.add(m); return m; });
@@ -239,7 +277,7 @@ if(SCENE.environment==='jungle') (function buildJungle(){
     uniforms:{top:{value:new THREE.Color()}, hor:{value:new THREE.Color()}, sunC:{value:new THREE.Color()}, sunDir:{value:new THREE.Vector3(0,0.5,-1)}},
     vertexShader:'varying vec3 vD; void main(){ vD=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
     fragmentShader:'uniform vec3 top,hor,sunC,sunDir; varying vec3 vD; void main(){ float h=clamp(vD.y,0.0,1.0); vec3 c=mix(hor,top,pow(h,0.6)); float s=max(dot(normalize(vD),normalize(sunDir)),0.0); c+=sunC*(pow(s,40.0)*1.5+pow(s,4.0)*0.35); gl_FragColor=vec4(c,1.0); }'});
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(120,32,16),skyMat); scene.add(sky);
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(Math.max(120,RB*2.2),32,16),skyMat); scene.add(sky);
   // light shafts: billboards around their axis, additive
   const shaftMat=()=>new THREE.ShaderMaterial({transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, fog:false, side:THREE.DoubleSide,
     uniforms:{col:{value:new THREE.Color()}, op:{value:0}, time:{value:0}, seed:{value:R()*10}},
@@ -258,7 +296,8 @@ if(SCENE.environment==='jungle') (function buildJungle(){
   // fireflies (night) and dust motes (in the sun)
   function points(n,area,size,color){
     const pos=new Float32Array(n*3), ph=new Float32Array(n);
-    for(let k=0;k<n;k++){ const a=R()*7, e=Math.sqrt(R())*area; pos[k*3]=CX+Math.cos(a)*RX*e; pos[k*3+1]=rr(0.15,3.6); pos[k*3+2]=CZ+Math.sin(a)*RZ*e; ph[k]=R(); }
+    for(let k=0;k<n;k++){ const a=R()*7, e=Math.sqrt(R())*area; pos[k*3]=CX+Math.cos(a)*RX*e; pos[k*3+1]=rr(0.15,3.6); pos[k*3+2]=CZ+Math.sin(a)*RZ*e; ph[k]=R();
+      if(k%3===0&&pathPts.length){ const q=pick(pathPts); if(Math.hypot(q.x-CX,q.z-CZ)>RX){ pos[k*3]=q.x+rr(-4,4); pos[k*3+1]=rr(0.3,Math.max(1,q.y+2)); pos[k*3+2]=q.z+rr(-4,4); } } }
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('ph',new THREE.BufferAttribute(ph,1));
     const m=new THREE.ShaderMaterial({transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
       uniforms:{col:{value:new THREE.Color(color)}, op:{value:0}, time:{value:0}, size:{value:size}, spark:{value:0}, epoch:{value:0}, px:{value:1}},
@@ -283,12 +322,13 @@ if(SCENE.environment==='jungle') (function buildJungle(){
   fill.groundColor.set(0x1a1610);
 
   // ---------- per frame
-  const KF=makeKF(SCENE.light,{day:0.5,sun:0.5,shafts:0.5,sweep:0.5,spread:1,fireflies:0,mist:0.5,cool:0,warm:0,elevation:J.sun_elevation_deg,azimuth:J.sun_azimuth_deg});
-  const NIGHT=new THREE.Color(0x1f2a52), DAWN=new THREE.Color(0xd09068), DAY=new THREE.Color(0xeee6c6), DAMP=new THREE.Color(0x30402c), COOL=new THREE.Color(0x9fb4e0), WARM=new THREE.Color(0xffb062);
+  const lightKeys=(SCENE.light||[]).map(k=>{ const o={...k}; if(o.fireflies!==undefined&&o.particles===undefined){ o.particles=o.fireflies; } delete o.fireflies; return o; });
+  const KF=makeKF(lightKeys,{day:0.5,sun:0.5,shafts:0.5,sweep:0.5,spread:1,particles:0,mist:0.5,cool:0,warm:0,elevation:J.sun_elevation_deg,azimuth:J.sun_azimuth_deg});
+  const C_=h=>new THREE.Color(h), NIGHT=C_(PAL.night), DAWN=C_(PAL.dawn), DAY=C_(PAL.day), DAMP=C_(PAL.haze), COOL=C_(PAL.cool), WARM=C_(PAL.warm);
   const _c=new THREE.Color(), _d=new THREE.Vector3(), _x=new THREE.Vector3(), _y=new THREE.Vector3(), _z=new THREE.Vector3(), _cp=new THREE.Vector3();
   let centS=null, lastTT=null;
   ENV.update=(t,a)=>{
-    const k=KF(t), JP={daylight:P.jDay, shafts:P.jShafts, sweep:P.jSweep, leafGlow:P.jGlow, mist:P.jMist, fireflies:P.jFlies, warmth:P.jWarm};
+    const k=KF(t), JP={daylight:P.sDay, shafts:P.sShafts, sweep:P.sSweep, leafGlow:P.sGlow, mist:P.sMist, particles:P.sParticles, warmth:P.sWarm};
     // slow the brightness so the sweep reads as a sweep, not a flicker (stateless: a short window average)
     let cs=0; for(let i=-6;i<=6;i++) cs+=feat('cent',Math.max(0,t+i*0.08)); cs/=13;
     const day=clamp(k.day*JP.daylight,0,1.2);
@@ -312,7 +352,7 @@ if(SCENE.environment==='jungle') (function buildJungle(){
     scene.fog.density=J.fog*(0.7+0.6*k.mist*JP.mist)+P.haze*0.02*a.flat;
     rings.forEach((m,i)=>m.material.color.copy(sky).multiplyScalar((0.04+0.03*i)*(0.2+lv)));
     // leaves glow when backlit
-    leafMat.emissive.copy(sunC).multiplyScalar(JP.leafGlow*(0.04+0.45*day*k.sun)*L*(0.6+0.6*cs));
+    if(FOREST) FOREST.leafMat.emissive.copy(sunC).multiplyScalar(JP.leafGlow*(0.04+0.45*day*k.sun)*L*(0.6+0.6*cs));
     // shafts
     camera.getWorldPosition(_cp);
     shafts.forEach((s,i)=>{
@@ -332,7 +372,7 @@ if(SCENE.environment==='jungle') (function buildJungle(){
     // fireflies sparkle on the xylophone onsets; dust shows in the sun
     const px=renderer.getSize(new THREE.Vector2()).y/1080*renderer.getPixelRatio()*1.6;
     [flies,dust].forEach(m=>{ m.uniforms.time.value=t; m.uniforms.px.value=px; });
-    flies.uniforms.op.value=k.fireflies*JP.fireflies*a.fin*(1-a.oL)*1.2; flies.uniforms.spark.value=clamp(a.onset*1.4-0.2); flies.uniforms.epoch.value=Math.floor(t*6);
+    flies.uniforms.op.value=k.particles*JP.particles*a.fin*(1-a.oL)*1.2; flies.uniforms.spark.value=clamp(a.onset*1.4-0.2); flies.uniforms.epoch.value=Math.floor(t*6);
     dust.uniforms.op.value=k.sun*day*0.35*L; dust.uniforms.spark.value=0; dust.uniforms.col.value.copy(sunC).lerp(new THREE.Color(0xffffff),0.5);
   };
 })();

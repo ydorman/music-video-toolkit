@@ -34,22 +34,33 @@ make them in the toolkit repo, keep them generic, document them here, then updat
   from bar 1 of the grid. The preview shows the current section and has a button to jump to each one. Anything
   timed in scene.json can say `"at": "C"` (start of C), `"C+2"` (2 bars into C) or a time in seconds.
   `accents` (optional) lists the accented counts within the bar, for the choreography.
-- **Environment**: `"environment": "studio"` (default) or `"jungle"`, a procedural rain forest (trunks, understory,
-  palms, canopy, vines, leaf litter, distant forest, sky, light shafts, mist, fireflies and dust). Its `jungle`
-  block sets the seed (a different seed = a different forest), clearing size/centre, trunk count, understory/canopy
-  density, canopy height, vines, fog and the sun's default direction. Plants are kept out of every camera's path.
+- **Environment**: `"environment": "studio"` (default, the clip 05 backdrop) or an outdoor preset. Outdoor scenes
+  share one generic system: ground, sky, fog, sun with dappled light, light shafts, mist, particles, light keyframes,
+  palette. A preset adds its content and defaults; so far `"jungle"` (a procedural rain forest: trunks, understory,
+  palms, epiphytes, leafy vines, canopy, leaf litter, distant forest). A new setting = a new preset in
+  `ENV_PRESETS` (engine/scene.js) plus its content generator, not a new editor.
+  `settings` overrides the preset's parameters (jungle: seed (different seed = different forest), clearing size and
+  centre, trunks, understory, canopy, canopy height, vines, fog, default sun direction). `palette` sets the light
+  colours: `night`, `dawn`, `day` (blended by the day level), `haze` (tints the fog), `cool`, `warm`.
+  The set is kept clear along the whole camera path (a corridor around the flight and the view ahead of the lens).
 - **Light keyframes** (`light`): each entry holds from its `at` until the next and blends in over `blend` bars.
-  Jungle keys: `day` (0 night .. 1 full day), `sun` (direct sun and shafts), `shafts`, `sweep` (how far the sun
-  swings with the sound's brightness), `spread` (1 = shafts all over the clearing, small = one focused shaft),
-  `fireflies` (they sparkle on note onsets), `mist` (also thickens with noisier sound), `cool`, `warm`,
-  `elevation`/`azimuth` (sun direction, degrees). Loudness, fade-in and ending still come from look.json.
-  The preview's **Jungle** sliders scale these for the whole clip and are saved in look.json under `jungle`.
-- **Cameras** (`cameras`): one shot per entry, held until the next: `pos`, `look`, `fov` (vertical, 16:9), optional
-  `to` (where the shot ends), `path` `"line"` or `"arc"` (around the look point), `"cut": false` + `blend` (bars)
-  to blend from the previous shot instead of cutting. `camera_sway` (default 1) adds a slow handheld breath.
-  In the preview, Camera: Free lets you orbit (drag), pan (shift-drag) and zoom (scroll); **Copy camera shot**
-  copies the current view as a shot to paste into the chat. Portrait renders widen the view automatically
-  (a per-shot portrait framing is still to come).
+  Keys: `day` (0 night .. 1 full day), `sun` (direct sun and shafts), `shafts`, `sweep` (how far the sun swings
+  with the sound's brightness), `spread` (1 = shafts all over the clearing, small = one focused shaft),
+  `particles` (fireflies in the jungle; they sparkle on note onsets), `mist` (also thickens with noisier sound),
+  `cool`, `warm`, `elevation`/`azimuth` (sun direction, degrees). Loudness, fade-in and ending come from look.json.
+  The preview's **Scene** sliders scale these for the whole clip and are saved in look.json under `scene`.
+- **Cameras** (`cameras`): one entry per key, held until the next: `pos`, `look`, `fov` (vertical, 16:9).
+  - `to` (where the shot ends) + `path` `"line"` or `"arc"` (around the look point): a move eased over the shot.
+  - `"glide": true`: fly smoothly from this pose to the next entry's pose. Consecutive glide entries are one
+    continuous flight through all their poses (it only slows at the start and end of the chain). To glide into a
+    cut, end the chain with an entry at the cut time and put the next shot at the same `at`.
+  - `"cut": false` + `blend` (bars): blend from the previous shot instead of cutting.
+  - `camera_sway` (default 1) adds a slow handheld breath.
+  In the preview: **Director** plays these shots exactly as they will render. **Free** hands you the camera
+  (drag = orbit, shift-drag = pan, scroll = zoom; the render ignores it) and starts from the director's current
+  view. **Copy camera shot** copies the current view with its position in the music (`at` to the nearest quarter
+  bar, plus `t` in seconds). For a move, copy the start and end views. Portrait renders widen the view
+  automatically (per-shot portrait framing is still to come).
 
 ## 2. Analyse
 `python3 toolkit/tools/analyze.py clips/<clip>` prints the pulse, grid fit, bar-phase scores, music start/end and
@@ -95,5 +106,5 @@ When you're happy with the renders:
 - Choreography is a loop: positions cycle per bar, steps per bar, one optional turn; the start fade-in and the
   ending bow/fade are the only section-aware movement (light and cameras follow the sections via scene.json).
 - Costumes: only `robe` (generated from MakeHuman's fitting helpers; a sash hides the waist seam).
-- Backgrounds: the studio backdrop or the procedural jungle (engine/scene.js). More environments go there too.
+- Backgrounds: the studio backdrop or an outdoor preset (so far the procedural jungle; engine/scene.js).
 - The smoke test skips the web fonts (not reachable from the container), so its screenshots use fallback fonts.
