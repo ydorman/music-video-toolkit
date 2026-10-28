@@ -15,14 +15,15 @@ function lookToP(L){ const m=(L&&L.mapping)||{}, g=(o,k,d)=>(o&&o[k]!==undefined
     shift:g(m,'downbeat_shift',0), offsetMs:g(m,'visual_offset_ms',0),
     sDay:g(m.scene||m.jungle,'daylight',1), sShafts:g(m.scene||m.jungle,'shafts',1), sSweep:g(m.scene||m.jungle,'sweep',1),
     sGlow:g(m.scene||m.jungle,'foliage_glow',g(m.jungle,'leaf_glow',1)), sMist:g(m.scene||m.jungle,'mist',1),
-    sParticles:g(m.scene||m.jungle,'particles',g(m.jungle,'fireflies',1)), sWarm:g(m.scene||m.jungle,'warmth',0) }; }
+    sParticles:g(m.scene||m.jungle,'particles',g(m.jungle,'fireflies',1)), sWarm:g(m.scene||m.jungle,'warmth',0),
+    colors:JSON.parse(JSON.stringify(g(m,'colors',{}))) }; }
 function pToLook(){ return {track:TRACK.title, meter:TRACK.meter, pulse_bpm:TRACK.pulse_bpm, actors:PEOPLE_DATA.length, positions:CHOREO.positions.map(s=>s.name),
   mapping:{ "loudness->light":{base:P.dim, response:P.resp}, "brightness->hue":{dark:P.hueDark, bright:P.hueBright, tint:P.tint},
     "noisiness->haze":P.haze, "bar->position":{bars_per_position:P.posBars, transition:P.sharp},
     "bar->step":{size_m:P.step, pattern:CHOREO.step_pattern_name||'custom'}, turn_during_position:P.turnPos,
     start_end:{fade_in_s:P.fadeIn, ending_starts_s:P.outStart, ending_length_s:P.outLen},
     robe:{skirt_shape:P.skirt, sleeve_fullness:P.sleeve, skirt_swing:P.swing, sash_tint:P.sashTint}, "downbeat->dip":P.accent, sync_looseness_s:P.loose,
-    downbeat_shift:P.shift, visual_offset_ms:P.offsetMs,
+    downbeat_shift:P.shift, visual_offset_ms:P.offsetMs, colors:costumeColors(),
     ...(OUTDOOR?{scene:{daylight:P.sDay, shafts:P.sShafts, sweep:P.sSweep, foliage_glow:P.sGlow, mist:P.sMist, particles:P.sParticles, warmth:P.sWarm}}:{}) } }; }
 const P = lookToP(LOOK);
 const CPB = TRACK.counts_per_bar||7;          // counts (detected pulses) per bar
@@ -91,6 +92,24 @@ GROUPS.forEach(g=>{
   });
   cbox.appendChild(fs);
 });
+// costume colours: one cloth and (for actors with their own sash colour) one sash picker per actor; saved in look.json
+// "colors" by spot, overriding actors.csv costume_color / sash_color
+function costumeColors(){ const o={}; PEOPLE_DATA.forEach(p=>{ const c=p.meta.cfg, v=P.colors[c.spot]||{};
+  o[c.spot]={cloth:v.cloth||c.robe, ...(c.sash?{sash:v.sash||c.sash}:{})}; }); return o; }
+(function(){
+  const fs=document.createElement('fieldset'); fs.innerHTML='<legend>Costume colours</legend>';
+  PEOPLE_DATA.forEach((p,i)=>{ const c=p.meta.cfg, cur=costumeColors()[c.spot];
+    const d=document.createElement('div'); d.className='ctl colorrow';
+    d.innerHTML=`<label><span>${c.spot} \u00b7 ${c.costume||'robe'}</span></label>`;
+    [['cloth','Cloth'],...(c.sash?[['sash','Sash']]:[])].forEach(([k,lab])=>{
+      const l=document.createElement('label'); l.className='swatch'; l.textContent=lab+' ';
+      const inp=document.createElement('input'); inp.type='color'; inp.value=cur[k].toLowerCase(); inp.setAttribute('aria-label',c.spot+' '+lab);
+      inp.oninput=()=>{ (P.colors[c.spot]=P.colors[c.spot]||{})[k]=inp.value; applyCostumeColor(i); updCfg(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); };
+      l.appendChild(inp); d.appendChild(l); });
+    fs.appendChild(d); });
+  const h=document.createElement('div'); h.className='ctl'; h.innerHTML='<small>Men\u2019s sashes take their partner\u2019s colour (choreography.json partners).</small>'; fs.appendChild(h);
+  cbox.appendChild(fs);
+})();
 const dots=document.getElementById('dots'); for(let i=0;i<CPB;i++) dots.appendChild(document.createElement('span'));
 
 // ---------- helpers

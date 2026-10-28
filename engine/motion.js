@@ -96,6 +96,9 @@ const PARTNERS=(CHOREO.partners||[]).map(e=>{ const take=CFG.map(()=>null);
       if(SASH_OWN[ib]&&!SASH_OWN[ia]) take[ia]=SASH_OWN[ib]; if(SASH_OWN[ia]&&!SASH_OWN[ib]) take[ib]=SASH_OWN[ia]; });
     return {T:atTime(e.at), dur:(e.blend===undefined?2:e.blend)*CPB*F.beat_period, take}; }).sort((a,b)=>a.T-b.T);
 const _sc=new THREE.Color();
+function applyCostumeColor(i){ const v=P.colors[CFG[i].spot]||{};   // look.json "colors" override actors.csv (set in place, PARTNERS share these objects)
+  if(v.cloth) dancers[i].robeBase.set(v.cloth); if(v.sash&&SASH_OWN[i]) SASH_OWN[i].set(v.sash); }
+CFG.forEach((c,i)=>applyCostumeColor(i));
 function sashAt(i,t){                 // -> [colour, amount 0..1] or null; a pure function of t
   if(SASH_OWN[i]) return [SASH_OWN[i],1];
   let r=0,g=0,b=0,k=0;                 // colour premultiplied by its amount, so blending to and from neutral is linear

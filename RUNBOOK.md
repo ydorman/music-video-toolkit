@@ -39,6 +39,8 @@ so heads don't look bald between the see-through hair cards when seen from above
 lists who is paired with whom from each `at` (as in scene.json): `[{"at":"C","blend":2,"pairs":[["m2","w1"],...]}]`.
 The partner without a colour of their own takes on the other's over `blend` bars; an actor in no pair fades back to
 neutral (the lone one).
+The preview's **Costume colours** pickers (one cloth colour per actor, and a sash colour for actors with their own)
+are saved in look.json under `colors` by spot and override actors.csv `costume_color` / `sash_color`.
 The preview's **Costume** sliders (saved in look.json under `robe`): `skirt_shape` (flare), `sash_tint` (how strongly
 sashes show their colours, default 0.6), `skirt_swing` (the skirt of robes and dresses trails behind steps and flares
 out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe only).
