@@ -49,6 +49,62 @@ function legIK(d,side,target,yawQ){
   aim(ft,toe,rf);
 }
 
+// ---------- timeline (choreography.json "timeline"): per actor, where they are, travel and face, section by section.
+// Entries {at, to:[x,z] (travel there over "bars", default 2; the first entry places the actor), face: degrees (0 = audience)
+// | actor spot | [x,z] point | "path", turn_bars (default 1)}. Feet step on the accents while moving or turning.
+// Everything is a pure function of t. Actors without a timeline keep the looping step pattern and turn.
+const ACC=new Set((TRACK.accents||[1]).map(a=>((a-1)%CPB+CPB)%CPB));
+const TLD=CFG.map(c=>{ const L=CHOREO.timeline&&CHOREO.timeline[c.spot]; if(!L||!L.length) return null; const bar=CPB*F.beat_period;
+  return L.map(e=>({T:atTime(e.at), dur:(e.bars===undefined?2:e.bars)*bar, to:e.to||null, face:e.face, turnDur:(e.turn_bars===undefined?1:e.turn_bars)*bar})).sort((a,b)=>a.T-b.T); });
+const angDiff=(a,b)=>{ let d=(b-a)%(2*Math.PI); if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI; return d; };
+function tlPos(i,t){
+  const L=TLD[i], s0=L[0].to||SPOT_POS[CFG[i].spot]||[0,0];
+  let sx=s0[0], sz=s0[1], tx=sx, tz=sz, T0=L[0].T, dur=1;
+  for(let k=1;k<L.length;k++){ const e=L[k]; if(e.T>t) break; if(!e.to) continue;
+    const u=ease(clamp((e.T-T0)/dur)); sx=lerp(sx,tx,u); sz=lerp(sz,tz,u); tx=e.to[0]; tz=e.to[1]; T0=e.T; dur=e.dur; }
+  const u=ease(clamp((t-T0)/dur)); return [lerp(sx,tx,u), lerp(sz,tz,u)];
+}
+function faceTarget(i,f,t,p){
+  if(f===undefined||f===null) return null;
+  if(typeof f==='number') return f*D;
+  let q=null;
+  if(f==='path'){ const a=tlPos(i,t), b=tlPos(i,t+0.4); if(Math.hypot(b[0]-a[0],b[1]-a[1])<0.01) return null; q=[p[0]+b[0]-a[0], p[1]+b[1]-a[1]]; }
+  else if(Array.isArray(f)) q=f;
+  else { const j=SPOT_I[f]; if(j===undefined) return null; q=TLD[j]?tlPos(j,t):(SPOT_POS[f]||[0,0]); }
+  return Math.atan2(q[0]-p[0], q[1]-p[1]);
+}
+function tlYaw(i,t){
+  const L=TLD[i]; let k=0; for(let j=0;j<L.length;j++){ if(L[j].T<=t) k=j; else break; }
+  while(k>0 && L[k].face===undefined) k--;
+  const e=L[k], tgt=faceTarget(i,e.face,t,tlPos(i,t));
+  if(k===0) return tgt===null?0:tgt;
+  const start=tlYaw(i,e.T-1e-3); if(tgt===null) return start;
+  return start+angDiff(start,tgt)*ease(clamp((t-e.T)/e.turnDur));
+}
+const pulseTime=n=>F.beat_offset+P.offsetMs/1000+(n+P.shift+F.bar_phase)*F.beat_period;
+function tlFeet(d,t){   // world foot targets {L:[x,y,z], R:[...]}: planted, stepping on the accents while the actor moves or turns
+  const i=d.i, L=TLD[i]; let k=-1; for(let j=1;j<L.length;j++){ if(L[j].T<=t) k=j; else break; }
+  const stance=(side,tt)=>{ const p=tlPos(i,tt), q=new THREE.Quaternion().setFromAxisAngle(UPV,tlYaw(i,tt));
+    const r=d.rest['foot.'+side].clone().sub(new THREE.Vector3(d.rest.root.x,0,d.rest.root.z)).multiplyScalar(d.sc).applyQuaternion(q);
+    return [p[0]+r.x, p[1]+r.z]; };
+  const out={}, fy=s=>d.rest['foot.'+s].y*d.sc;
+  if(k<0){ ['L','R'].forEach(s=>{ const f=stance(s,t); out[s]=[f[0],fy(s),f[1]]; }); return out; }
+  const e=L[k], Tend=e.T+Math.max(e.to?e.dur:0, e.face!==undefined?e.turnDur:0);
+  const lands=[]; let after=0;
+  for(let n=Math.ceil(beatPos(e.T)+1e-6); after<2 && lands.length<200; n++){ const tt=pulseTime(n); if(!ACC.has(((n%CPB)+CPB)%CPB)) continue;
+    lands.push(tt); if(tt>Tend) after++; }
+  ['L','R'].forEach((s,si)=>{
+    const mine=lands.filter((_,j)=>j%2===si);
+    let from=stance(s,e.T), lift=0, j=0;
+    const land=j=>stance(s,mine[j]+0.4*(mine[j]-(j>0?mine[j-1]:e.T)));   // the foot reaches ahead, where the body will be
+    while(j<mine.length && mine[j]<=t){ from=land(j); j++; }
+    let f=from;
+    if(j<mine.length){ const tn=mine[j], prev=j>0?mine[j-1]:e.T, sw=Math.min(0.6*(tn-prev),0.8), u=clamp((t-(tn-sw))/sw);
+      if(u>0){ const to=land(j), k2=ease(u); f=[lerp(from[0],to[0],k2), lerp(from[1],to[1],k2)]; lift=Math.sin(Math.PI*u)*0.05; } }
+    out[s]=[f[0],fy(s)+lift,f[1]]; });
+  return out;
+}
+
 // per-dancer timing at time t: position slot, step, weight shift (cx, cz in metres) and turn (rot); a pure function of t
 function timing(i,t,oW){
   const ti=t-LAG[i]*P.loose;
@@ -66,8 +122,9 @@ function timing(i,t,oW){
   const st=P.step*(1-oW);
   let rot=0;
   const slotEnd=ti+(1-frac)*posLen*F.beat_period;
-  if(P.turnPos && ci===P.turnPos-1 && slotEnd<=P.outStart){ rot=2*Math.PI*ease(clamp((frac-0.04)/0.85)); }
-  const cx=lerp(S0[0],S1[0],kb)*st*0.5, cz=lerp(S0[1],S1[1],kb)*st*0.5;
+  if(!TLD[i] && P.turnPos && ci===P.turnPos-1 && slotEnd<=P.outStart){ rot=2*Math.PI*ease(clamp((frac-0.04)/0.85)); }
+  let cx=lerp(S0[0],S1[0],kb)*st*0.5, cz=lerp(S0[1],S1[1],kb)*st*0.5;
+  if(TLD[i]){ const p=tlPos(i,ti), sp=SPOT_POS[CFG[i].spot]||[0,0]; cx=p[0]-sp[0]; cz=p[1]-sp[1]; rot=tlYaw(i,ti); }
   return {ti,pb,posLen,frac,ci,cur,prev,k,dip,bar,bf,S0,S1,kl,kt,leadSide,st,rot,cx,cz};
 }
 const outroW=t=>ease(clamp(clamp((t-P.outStart)/Math.max(0.1,P.outLen))*2.2));
@@ -146,6 +203,7 @@ function animate(t){
     // a slight personal lean
     rotWorld(d.bones.spine03,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1).applyQuaternion(yawQ),TILT[d.i]*0.006));
     // legs: feet follow the step pattern, lead foot first, with a small lift
+    const feet=TLD[d.i]?tlFeet(d,ti):null;
     ['L','R'].forEach(side=>{
       const s=side==='L'?1:-1, kk=(s===leadSide)?kl:kt;
       const lift=Math.sin(Math.PI*clamp((s===leadSide?bf/0.16:(bf-0.1)/0.22)))*0.04*(st>0?1:0);
@@ -153,6 +211,7 @@ function animate(t){
       const restLocal=d.rest['foot.'+side].clone().sub(new THREE.Vector3(d.rest.root.x,0,d.rest.root.z)).multiplyScalar(d.sc);
       restLocal.applyQuaternion(yawQ);
       const T=new THREE.Vector3(d.group.position.x,0,d.group.position.z).add(restLocal).add(off); T.y=d.rest['foot.'+side].y*d.sc+lift;
+      if(feet) T.set(...feet[side]);
       legIK(d,side,T,yawQ);
     });
     // arms

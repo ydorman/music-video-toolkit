@@ -45,6 +45,17 @@ The preview's **Costume** sliders (saved in look.json under `robe`): `skirt_shap
 sashes show their colours, default 0.6), `skirt_swing` (the skirt of robes and dresses trails behind steps and flares
 out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe only).
 
+### Choreography timeline (where actors are, travel and face)
+`choreography.json` `timeline` (optional): per actor spot, a list of entries from each `at` (as in scene.json):
+`{"at":"B","to":[x,z],"bars":3,"face":"w1","turn_bars":1}`.
+- `to`: travel there (metres; x = audience right, z = toward the audience) over `bars` (default 2), eased.
+  The first entry places the actor (no travel).
+- `face`: degrees (0 = audience), another actor's spot (tracked while either moves), an `[x,z]` point, or `"path"`
+  (the direction of travel); turns blend over `turn_bars` (default 1). An entry without `face` keeps the last one.
+- Feet step on the accents (`track.json` `accents`) while an actor travels or turns, then plant; skirts swing with it.
+- Actors without a timeline keep the looping step pattern and the turn from the preview.
+Arms still follow the looping positions (the movement vocabulary is the next slice).
+
 New capabilities (another costume, props, a background, new music mappings) are toolkit changes:
 make them in the toolkit repo, keep them generic, document them here, then update the submodule in the project.
 
@@ -124,8 +135,8 @@ When you're happy with the renders:
 
 ## Known limits
 - Rendering is in the browser on your GPU; Claude's container has none (several seconds per frame there).
-- Choreography is a loop: positions cycle per bar, steps per bar, one optional turn; the start fade-in and the
-  ending bow/fade are the only section-aware movement (light and cameras follow the sections via scene.json).
+- Choreography: travel and facing can follow the sections (timeline); arms still cycle per bar through the
+  positions, with one optional turn for actors without a timeline; the ending bow/fade is section-aware.
 - Costumes: `robe`, `trousers`, `dress` (generated from MakeHuman's fitting helpers, not cloth-simulated: the skirt
   swing is a morph driven by the hips' recent movement, so it shows most with quick steps and turns).
 - Backgrounds: the studio backdrop or an outdoor preset (so far the procedural jungle; engine/scene.js).
