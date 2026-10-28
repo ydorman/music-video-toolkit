@@ -35,11 +35,11 @@ data=lambda: ('const TRACK='+json.dumps(track)+';\nconst CHOREO='+json.dumps(cho
               ';\nconst PEOPLE_DATA='+json.dumps(people,separators=(',',':'))+';\n')
 sub=f"{track.get('meter','')} · pulse {track.get('pulse_bpm','')} bpm · {len(people)} actors"
 # preview
-js=data()+eng('core.js','stage.js','scene.js','actors.js','motion.js','preview.js')
+js=data()+eng('core.js','stage.js','scene.js','actors.js','vocab.js','motion.js','preview.js')
 h=open(os.path.join(SH,'preview.html')).read().replace('__TITLE__',track['title']).replace('__SUBTITLE__',sub).replace('__JS__',js).replace('__AUDIO__','data:audio/mpeg;base64,'+mp3(args.preview_kbps))
 open(os.path.join(B,'preview.html'),'w').write(h); print('preview.html  %.1f MB'%(len(h)/1e6))
 if len(h)>16e6: print('WARNING: preview is over 16 MB, too big to publish; lower --preview-kbps')
 # renderer
-js=data()+'const EMBED_AUDIO="'+mp3(args.renderer_kbps)+'";\n'+eng('core.js','stage.js','scene.js','actors.js','motion.js','render.js')
+js=data()+'const EMBED_AUDIO="'+mp3(args.renderer_kbps)+'";\n'+eng('core.js','stage.js','scene.js','actors.js','vocab.js','motion.js','render.js')
 h=open(os.path.join(SH,'renderer.html')).read().replace('__JS__',js)
 open(os.path.join(B,'renderer.html'),'w').write(h); print('renderer.html %.1f MB'%(len(h)/1e6))

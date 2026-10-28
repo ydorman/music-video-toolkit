@@ -54,7 +54,22 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   (the direction of travel); turns blend over `turn_bars` (default 1). An entry without `face` keeps the last one.
 - Feet step on the accents (`track.json` `accents`) while an actor travels or turns, then plant; skirts swing with it.
 - Actors without a timeline keep the looping step pattern and the turn from the preview.
-Arms still follow the looping positions (the movement vocabulary is the next slice).
+
+### Movement vocabulary: poses and phrases
+- **Poses** (base library in `engine/vocab.js`; a clip adds or overrides in `choreography.json` `poses`): `arms` (both) or
+  `left`/`right` ([raise to side, raise forward, elbow forward, elbow in-plane, palm twist], as seen from the audience),
+  `head` [bow, tilt], `torso` [bend forward, bend toward the audience's right, twist], `plie`/`releve` (0-1),
+  `leg.left`/`leg.right` [direction: 0 front, 90 out to its side, 180 back; height in degrees; knee bend 0-1], `turn`
+  (degrees turned while moving into the pose), `base` (start from another pose). `name_L` mirrors `name_R`.
+  Library: stand, prep, first, second, fifth, demi_plie, releve, reach_R, open_heart, curl, port_fwd, cambre,
+  side_bend_R, tendu_R, developpe_R, arabesque_R, attitude_R, retire_R, pirouette_R, promenade_R, lunge_R, bow.
+- **Phrases** (`choreography.json` `phrases`): `{"bars":2,"keys":[{"at":1,"pose":"curl"},{"at":8,"pose":"prep"},...]}`;
+  `at` counts from 1 across the phrase's bars (bar 2 starts at count 16 in 15/8). Each pose arrives on its count; the
+  move takes the preview's Transition share of the gap before it. Phrases loop, aligned to the bar their entry starts in.
+- A timeline entry's `phrase` starts a phrase, blending from the previous over `phrase_blend` bars (0.5).
+- While an actor travels or turns by the timeline, leg gestures drop out and plie/releve soften, so the steps stay clean:
+  turn dancers in place with a phrase `turn` (e.g. pirouette_R) rather than a timeline `face` change mid-solo.
+- Actors without a phrase keep the looping arm positions. The ending bow blends every pose into the final pose.
 
 New capabilities (another costume, props, a background, new music mappings) are toolkit changes:
 make them in the toolkit repo, keep them generic, document them here, then update the submodule in the project.
@@ -135,8 +150,8 @@ When you're happy with the renders:
 
 ## Known limits
 - Rendering is in the browser on your GPU; Claude's container has none (several seconds per frame there).
-- Choreography: travel and facing can follow the sections (timeline); arms still cycle per bar through the
-  positions, with one optional turn for actors without a timeline; the ending bow/fade is section-aware.
+- Choreography: travel and facing can follow the sections (timeline); actors with phrases dance poses on the
+  counts (no partner contact yet); others cycle the arm positions with one optional turn; the ending bow is section-aware.
 - Costumes: `robe`, `trousers`, `dress` (generated from MakeHuman's fitting helpers, not cloth-simulated: the skirt
   swing is a morph driven by the hips' recent movement, so it shows most with quick steps and turns).
 - Backgrounds: the studio backdrop or an outdoor preset (so far the procedural jungle; engine/scene.js).

@@ -21,6 +21,7 @@ const SEQ=CHOREO.positions.map(s=>({name:s.name, L:armOf(s.left), R:armOf(s.righ
 const STEPS=CHOREO.step_pattern;
 const FINAL={L:armOf(CHOREO.final_pose.left), R:armOf(CHOREO.final_pose.right), head:CHOREO.final_pose.head};
 const NPOS=SEQ.length;
+const lerp2=(a,b,k)=>[lerp(a[0],b[0],k),lerp(a[1],b[1],k)];
 function lerpArm(a,b,k){ const o={}; for(const key in a) o[key]=lerp(a[key],b[key],k); return o; }
 const _e=new THREE.Euler(), _m3=new THREE.Quaternion(), _m4=new THREE.Quaternion();
 function armDirs(s,q,pers,yawQ){
@@ -32,20 +33,22 @@ function armDirs(s,q,pers,yawQ){
   return [up,fo,abd];
 }
 const UPV=new THREE.Vector3(0,1,0);
-function legIK(d,side,target,yawQ){
+function legIK(d,side,target,yawQ,o={}){
   const b=d.bones, ul=b['upperleg01.'+side], ll=b['lowerleg01.'+side], ft=b['foot.'+side];
   const H=ul.getWorldPosition(new THREE.Vector3());
   const r=d.rest, sc=d.sc;
   const L1=r['lowerleg01.'+side].distanceTo(r['upperleg01.'+side])*sc, L2=r['foot.'+side].distanceTo(r['lowerleg01.'+side])*sc;
   const T=target.clone(); let dv=T.clone().sub(H); let dist=Math.min(dv.length(),(L1+L2)*0.999); const dir=dv.normalize();
   const a=(L1*L1-L2*L2+dist*dist)/(2*dist), hh=Math.sqrt(Math.max(0,L1*L1-a*a));
-  const fwd=new THREE.Vector3(0,0,1).applyQuaternion(yawQ); const pole=fwd.sub(dir.clone().multiplyScalar(fwd.dot(dir))).normalize();
+  const fwd=o.pole?o.pole.clone():new THREE.Vector3(0,0,1).applyQuaternion(yawQ); const pole=fwd.sub(dir.clone().multiplyScalar(fwd.dot(dir))).normalize();
   const K=H.clone().add(dir.clone().multiplyScalar(a)).add(pole.multiplyScalar(hh));
   aim(ul,ll,K.clone().sub(H).normalize());
   const Kw=ll.getWorldPosition(new THREE.Vector3());
   aim(ll,ft,T.clone().sub(Kw).normalize());
   // keep the foot flat, pointing where the body points
-  const toe=b['toe3-1.'+side]; const rf=r['toe3-1.'+side].clone().sub(r['foot.'+side]).normalize().applyQuaternion(yawQ);
+  const toe=b['toe3-1.'+side]; let rf=r['toe3-1.'+side].clone().sub(r['foot.'+side]).normalize().applyQuaternion(yawQ);
+  if(o.point) rf.lerp(o.point,o.pointW===undefined?1:o.pointW).normalize();      // pointed foot along the leg
+  if(o.releve){ const h=rf.clone().setY(0).normalize(); rf=h.multiplyScalar(Math.cos(o.releve*1.05)).add(new THREE.Vector3(0,-Math.sin(o.releve*1.05),0)).normalize(); }
   aim(ft,toe,rf);
 }
 
@@ -55,7 +58,8 @@ function legIK(d,side,target,yawQ){
 // Everything is a pure function of t. Actors without a timeline keep the looping step pattern and turn.
 const ACC=new Set((TRACK.accents||[1]).map(a=>((a-1)%CPB+CPB)%CPB));
 const TLD=CFG.map(c=>{ const L=CHOREO.timeline&&CHOREO.timeline[c.spot]; if(!L||!L.length) return null; const bar=CPB*F.beat_period;
-  return L.map(e=>({T:atTime(e.at), dur:(e.bars===undefined?2:e.bars)*bar, to:e.to||null, face:e.face, turnDur:(e.turn_bars===undefined?1:e.turn_bars)*bar})).sort((a,b)=>a.T-b.T); });
+  return L.map(e=>({T:atTime(e.at), dur:(e.bars===undefined?2:e.bars)*bar, to:e.to||null, face:e.face, turnDur:(e.turn_bars===undefined?1:e.turn_bars)*bar,
+    phrase:e.phrase, phraseBlend:(e.phrase_blend===undefined?0.5:e.phrase_blend)*bar})).sort((a,b)=>a.T-b.T); });
 const angDiff=(a,b)=>{ let d=(b-a)%(2*Math.PI); if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI; return d; };
 function tlPos(i,t){
   const L=TLD[i], s0=L[0].to||SPOT_POS[CFG[i].spot]||[0,0];
@@ -83,11 +87,12 @@ function tlYaw(i,t){
 }
 const pulseTime=n=>F.beat_offset+P.offsetMs/1000+(n+P.shift+F.bar_phase)*F.beat_period;
 function tlFeet(d,t){   // world foot targets {L:[x,y,z], R:[...]}: planted, stepping on the accents while the actor moves or turns
-  const i=d.i, L=TLD[i]; let k=-1; for(let j=1;j<L.length;j++){ if(L[j].T<=t) k=j; else break; }
-  const stance=(side,tt)=>{ const p=tlPos(i,tt), q=new THREE.Quaternion().setFromAxisAngle(UPV,tlYaw(i,tt));
+  const i=d.i, L=TLD[i]; let k=-1; for(let j=1;j<L.length;j++){ if(L[j].T>t) break; if(L[j].to||L[j].face!==undefined) k=j; }   // phrase-only entries don't step
+  const stance=(side,tt)=>{ const p=tlPos(i,tt), q=new THREE.Quaternion().setFromAxisAngle(UPV,yawAt(i,tt));
     const r=d.rest['foot.'+side].clone().sub(new THREE.Vector3(d.rest.root.x,0,d.rest.root.z)).multiplyScalar(d.sc).applyQuaternion(q);
     return [p[0]+r.x, p[1]+r.z]; };
   const out={}, fy=s=>d.rest['foot.'+s].y*d.sc;
+  out.moving=0;
   if(k<0){ ['L','R'].forEach(s=>{ const f=stance(s,t); out[s]=[f[0],fy(s),f[1]]; }); return out; }
   const e=L[k], Tend=e.T+Math.max(e.to?e.dur:0, e.face!==undefined?e.turnDur:0);
   const lands=[]; let after=0;
@@ -102,8 +107,53 @@ function tlFeet(d,t){   // world foot targets {L:[x,y,z], R:[...]}: planted, ste
     if(j<mine.length){ const tn=mine[j], prev=j>0?mine[j-1]:e.T, sw=Math.min(0.6*(tn-prev),0.8), u=clamp((t-(tn-sw))/sw);
       if(u>0){ const to=land(j), k2=ease(u); f=[lerp(from[0],to[0],k2), lerp(from[1],to[1],k2)]; lift=Math.sin(Math.PI*u)*0.05; } }
     out[s]=[f[0],fy(s)+lift,f[1]]; });
+  // walking weight: 1 from the first step to the last landing (eased in and out over half a second)
+  if(lands.length>2){ const a=lands[0]-0.6, z=lands[lands.length-1]; out.moving=clamp((t-a)/0.5)*clamp((z-t)/0.5); }
   return out;
 }
+
+// ---------- phrases: timeline entries {"phrase": name} start a phrase (choreography.json "phrases": {name: {bars, keys:
+// [{at: count 1.., pose}]}}), aligned to the bar where the entry starts, looping; each pose arrives on its count (the move
+// takes the preview's transition share of the gap before it). Changing phrase blends over "phrase_blend" bars (0.5).
+const POSE_SRC=Object.assign({},POSE_LIB,CHOREO.poses||{}), _poseCache={};
+const ZERO_POSE={L:[8,5,5,0,0],R:[8,5,5,0,0],head:[0,0],torso:[0,0,0],plie:0,releve:0,legL:[0,0,0],legR:[0,0,0],turn:0};
+function poseSpec(name){
+  if(_poseCache[name]) return _poseCache[name];
+  let p;
+  if(!POSE_SRC[name] && /_L$/.test(name) && POSE_SRC[name.slice(0,-2)+'_R']){ const m=poseSpec(name.slice(0,-2)+'_R');
+    p={L:[...m.R],R:[...m.L],head:[m.head[0],-m.head[1]],torso:[m.torso[0],-m.torso[1],-m.torso[2]],plie:m.plie,releve:m.releve,legL:[...m.legR],legR:[...m.legL],turn:-m.turn}; }
+  else { const src=POSE_SRC[name]||{}; const b=src.base?poseSpec(src.base):ZERO_POSE;
+    p=JSON.parse(JSON.stringify(b)); p.turn=0;
+    if(src.arms){ p.L=[...src.arms]; p.R=[...src.arms]; } if(src.left) p.L=[...src.left]; if(src.right) p.R=[...src.right];
+    ['head','torso'].forEach(k=>{ if(src[k]) p[k]=[...src[k]]; }); ['plie','releve','turn'].forEach(k=>{ if(src[k]!==undefined) p[k]=src[k]; });
+    if(src.leg){ if(src.leg.left) p.legL=[...src.leg.left]; if(src.leg.right) p.legR=[...src.leg.right]; } }
+  return _poseCache[name]=p;
+}
+const mixPose=(a,b,u)=>{ const o={}; for(const k in a) o[k]=Array.isArray(a[k])?a[k].map((v,j)=>lerp(v,b[k][j],u)):lerp(a[k],b[k],u); return o; };
+const PHRASES=CHOREO.phrases||{};
+const PH=CFG.map((c,i)=>TLD[i]?TLD[i].filter(e=>e.phrase&&PHRASES[e.phrase]).map(e=>{ const ph=PHRASES[e.phrase], len=(ph.bars||1)*CPB;
+  const keys=ph.keys.map(k=>({a:k.at-1, pose:poseSpec(k.pose)})).sort((x,y)=>x.a-y.a);
+  return {T:e.T, q0:Math.floor(beatPos(e.T)/CPB+1e-6)*CPB, len, keys, total:keys.reduce((s,k)=>s+k.pose.turn,0)*D, blend:e.phraseBlend}; }):[]);
+function phraseEval(ph,t){
+  const q=beatPos(t)-ph.q0, cyc=Math.floor(q/ph.len), r=q-cyc*ph.len, K=ph.keys, n=K.length;
+  let j=n-1; for(let m=0;m<n;m++) if(K[m].a<=r) j=m; else break;      // last key reached (wraps to the previous cycle's last)
+  const A=K[j], Bi=(j+1)%n, B=K[Bi], a=(A.a<=r)?A.a:A.a-ph.len, b=(Bi>j&&A.a<=r)?B.a:B.a+(A.a<=r?ph.len:0);
+  const span=Math.max(1e-3,b-a), sh=Math.max(0.05,P.sharp), u=ease(clamp((r-(b-sh*span))/(sh*span)));
+  let spin=cyc*ph.total; for(let m=0;m<n;m++) if(K[m].a<=r) spin+=K[m].pose.turn*D;
+  return {pose:mixPose(A.pose,B.pose,u), spin:spin+B.pose.turn*D*u};
+}
+function phraseIndex(i,t){ const L=PH[i]; let k=-1; for(let j=0;j<L.length;j++){ if(L[j].T<=t) k=j; else break; } return k; }
+function poseAt(i,t){                   // the actor's pose at t (blended across a phrase change), or null without phrases
+  const L=PH[i], k=phraseIndex(i,t); if(k<0) return null;
+  const cur=phraseEval(L[k],t).pose; if(k===0) return cur;
+  const u=clamp((t-L[k].T)/Math.max(1e-3,L[k].blend)); return u>=1?cur:mixPose(phraseEval(L[k-1],t).pose,cur,ease(u));
+}
+function phraseSpin(i,t){               // total turning from phrases, continuous across phrase changes
+  const L=PH[i], k=phraseIndex(i,t); if(k<0) return 0;
+  let s=0; for(let j=0;j<k;j++) s+=phraseEval(L[j],L[j+1].T).spin-phraseEval(L[j],L[j].T).spin;
+  return s+phraseEval(L[k],t).spin-phraseEval(L[k],L[k].T).spin;
+}
+const yawAt=(i,t)=>tlYaw(i,t)+phraseSpin(i,t);
 
 // per-dancer timing at time t: position slot, step, weight shift (cx, cz in metres) and turn (rot); a pure function of t
 function timing(i,t,oW){
@@ -124,7 +174,7 @@ function timing(i,t,oW){
   const slotEnd=ti+(1-frac)*posLen*F.beat_period;
   if(!TLD[i] && P.turnPos && ci===P.turnPos-1 && slotEnd<=P.outStart){ rot=2*Math.PI*ease(clamp((frac-0.04)/0.85)); }
   let cx=lerp(S0[0],S1[0],kb)*st*0.5, cz=lerp(S0[1],S1[1],kb)*st*0.5;
-  if(TLD[i]){ const p=tlPos(i,ti), sp=SPOT_POS[CFG[i].spot]||[0,0]; cx=p[0]-sp[0]; cz=p[1]-sp[1]; rot=tlYaw(i,ti); }
+  if(TLD[i]){ const p=tlPos(i,ti), sp=SPOT_POS[CFG[i].spot]||[0,0]; cx=p[0]-sp[0]; cz=p[1]-sp[1]; rot=yawAt(i,ti); }
   return {ti,pb,posLen,frac,ci,cur,prev,k,dip,bar,bf,S0,S1,kl,kt,leadSide,st,rot,cx,cz};
 }
 const outroW=t=>ease(clamp(clamp((t-P.outStart)/Math.max(0.1,P.outLen))*2.2));
@@ -194,16 +244,28 @@ function animate(t){
     const sc=sashAt(d.i,t); if(sc) d.mats.sash.color.lerp(sc[0],sc[1]*P.sashTint);
     const {ti,pb,posLen,frac,ci,cur,prev,k,dip,bar,bf,S0,S1,kl,kt,leadSide,st,rot,cx,cz}=timing(d.i,t,oW);
     const yawQ=new THREE.Quaternion().setFromAxisAngle(UPV,rot);
-    // root: shift weight between the feet, dip on the downbeat, turn
+    const feet=TLD[d.i]?tlFeet(d,ti):null;
+    // pose from the actor's phrase (null: the looping positions); walking softens plie/releve and drops leg gestures
+    const PZ=feet?poseAt(d.i,ti):null, ow=1-oW, wk=feet?feet.moving:0;
+    const pl=PZ?PZ.plie*(1-0.7*wk)*ow:0, rl=PZ?PZ.releve*(1-0.7*wk)*ow:0;
+    const gest=side=>{ if(!PZ) return [0,0,0]; const g=side==='L'?PZ.legR:PZ.legL; return [g[0],g[1]*(1-wk)*ow,g[2]]; };   // bone L = audience right
+    // root: shift weight between the feet (or over the standing leg), dip on the downbeat, plie/releve, turn
     resetPose(d);
     const root=d.bones.root;
-    root.position.set(d.rest.root.x+cx/d.sc, d.rest.root.y-(dip*0.045)/d.sc, d.rest.root.z+cz/d.sc);
+    let shx=0, shz=0;
+    if(feet){ const hL=gest('L')[1], hR=gest('R')[1], w=clamp(Math.max(hL,hR)/25)*0.55;
+      if(w>0){ const sup=feet[hL>hR?'R':'L'], rx=d.group.position.x+d.rest.root.x*d.sc+cx, rz=d.group.position.z+d.rest.root.z*d.sc+cz;
+        shx=(sup[0]-rx)*w; shz=(sup[2]-rz)*w; } }
+    root.position.set(d.rest.root.x+(cx+shx)/d.sc, d.rest.root.y-(dip*0.045+pl*0.11-rl*0.06)/d.sc, d.rest.root.z+(cz+shz)/d.sc);
     root.quaternion.copy(yawQ);
     d.group.updateMatrixWorld(true);
+    const xr=new THREE.Vector3(1,0,0).applyQuaternion(yawQ), zr=new THREE.Vector3(0,0,1).applyQuaternion(yawQ);
     // a slight personal lean
-    rotWorld(d.bones.spine03,new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1).applyQuaternion(yawQ),TILT[d.i]*0.006));
-    // legs: feet follow the step pattern, lead foot first, with a small lift
-    const feet=TLD[d.i]?tlFeet(d,ti):null;
+    rotWorld(d.bones.spine03,new THREE.Quaternion().setFromAxisAngle(zr,TILT[d.i]*0.006));
+    // torso: bend forward, to the side (toward the audience's right), twist; spread over three spine bones
+    if(PZ){ const [tf,ts,tw]=PZ.torso.map(v=>v*ow*D/3);
+      ['spine04','spine03','spine02'].forEach(bn=>rotWorld(d.bones[bn],new THREE.Quaternion().setFromAxisAngle(xr,tf).multiply(new THREE.Quaternion().setFromAxisAngle(zr,-ts)).multiply(new THREE.Quaternion().setFromAxisAngle(UPV,tw)))); }
+    // legs: feet follow the timeline steps (or the step pattern); a gesture leg reaches out by IK with a pointed foot
     ['L','R'].forEach(side=>{
       const s=side==='L'?1:-1, kk=(s===leadSide)?kl:kt;
       const lift=Math.sin(Math.PI*clamp((s===leadSide?bf/0.16:(bf-0.1)/0.22)))*0.04*(st>0?1:0);
@@ -212,24 +274,35 @@ function animate(t){
       restLocal.applyQuaternion(yawQ);
       const T=new THREE.Vector3(d.group.position.x,0,d.group.position.z).add(restLocal).add(off); T.y=d.rest['foot.'+side].y*d.sc+lift;
       if(feet) T.set(...feet[side]);
-      legIK(d,side,T,yawQ);
+      const o={}, [gd,gh,gk]=gest(side), gw=clamp(gh/20);
+      if(gw>0){
+        const hip=d.bones['upperleg01.'+side].getWorldPosition(new THREE.Vector3()), r=d.rest;
+        const len=(r['lowerleg01.'+side].distanceTo(r['upperleg01.'+side])+r['foot.'+side].distanceTo(r['lowerleg01.'+side]))*d.sc*(1-0.42*gk);
+        const out=new THREE.Vector3(s,0,0).applyQuaternion(yawQ), fw=new THREE.Vector3(0,0,1).applyQuaternion(yawQ);
+        const hz=fw.multiplyScalar(Math.cos(gd*D)).add(out.multiplyScalar(Math.sin(gd*D)));
+        const v=new THREE.Vector3(0,-Math.cos(gh*D),0).add(hz.multiplyScalar(Math.sin(gh*D))).normalize();
+        const G=hip.clone().addScaledVector(v,len); G.y=Math.max(G.y,T.y);
+        T.lerp(G,gw); o.point=v; o.pointW=gw; o.pole=gd>110?UPV.clone():new THREE.Vector3(0,0,1).applyQuaternion(yawQ);
+      } else if(rl>0){ T.y+=rl*0.06; o.releve=rl; }
+      legIK(d,side,T,yawQ,o);
     });
     // arms
-    const qa={L:lerpArm(lerpArm(prev.L,cur.L,k),FINAL.L,oW), R:lerpArm(lerpArm(prev.R,cur.R,k),FINAL.R,oW)};
+    const qa=PZ?{L:lerpArm(armOf(PZ.L),FINAL.L,oW), R:lerpArm(armOf(PZ.R),FINAL.R,oW)}
+              :{L:lerpArm(lerpArm(prev.L,cur.L,k),FINAL.L,oW), R:lerpArm(lerpArm(prev.R,cur.R,k),FINAL.R,oW)};
     ['L','R'].forEach(side=>{
       const s=side==='L'?1:-1, b=d.bones;
       // our "L" in the position table is the dancer's right as seen from the audience
       const qq=side==='L'?qa.R:qa.L;
       const [upD,foD,abd]=armDirs(s,qq,PERS[d.i],yawQ);
       const elev=Math.max(0,abd-80)*0.22*D;
-      rotWorld(b['clavicle.'+side],new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1).applyQuaternion(yawQ),s*elev));
+      rotWorld(b['clavicle.'+side],new THREE.Quaternion().setFromAxisAngle(zr,s*elev));
       aim(b['upperarm01.'+side],b['lowerarm01.'+side],upD);
       aim(b['lowerarm01.'+side],b['wrist.'+side],foD);
       rotWorld(b['lowerarm02.'+side],new THREE.Quaternion().setFromAxisAngle(foD,-s*qq.palm*D));
     });
     // head
-    const hb=lerp(lerp(prev.head[0],cur.head[0],k),FINAL.head[0],oW)+dip*6, ht=lerp(lerp(prev.head[1],cur.head[1],k),0,oW)+TILT[d.i];
-    const xr=new THREE.Vector3(1,0,0).applyQuaternion(yawQ), zr=new THREE.Vector3(0,0,1).applyQuaternion(yawQ);
+    const h0=PZ?PZ.head:lerp2(prev.head,cur.head,k);
+    const hb=lerp(h0[0],FINAL.head[0],oW)+dip*6, ht=lerp(h0[1],0,oW)+TILT[d.i];
     rotWorld(d.bones.neck02,new THREE.Quaternion().setFromAxisAngle(xr,hb*0.5*D));
     rotWorld(d.bones.head,new THREE.Quaternion().setFromAxisAngle(xr,hb*0.5*D).multiply(new THREE.Quaternion().setFromAxisAngle(zr,-ht*D)));
     if(d.robeMesh){ const mi=d.robeMesh.morphTargetInfluences;
