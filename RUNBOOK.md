@@ -54,18 +54,31 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   (the direction of travel); turns blend over `turn_bars` (default 1). An entry without `face` keeps the last one.
 - Body and feet come from a motion track simulated once at load (engine/motion.js `motionTrack`), so they obey what a
   body can do: the facing is reached at a limited turn rate and acceleration (150 deg/s, no snapping or reversing);
-  feet stay planted and step - landing on the counts, half counts when travelling fast, strides of at most 55 cm,
-  alternating - whenever the body has moved or turned away from them; no step while spinning or up on releve; a leg
-  gesture gives way (over about 0.8 s) before the body travels; the hips lower just enough that a standing leg always
-  reaches the floor. Skirts swing with it.
+  feet stay planted and step - landing on the counts, half counts when travelling fast (strides up to 72 cm), at
+  most 55 cm otherwise, alternating, off the count when fallen behind - whenever the body has moved or turned away
+  from them; no step while spinning on the spot, up on releve or kneeling; a leg gesture gives way (over about 0.8 s)
+  before the body travels; the hips lower just enough that a standing leg always reaches the floor, and sway (at most
+  4 cm, smoothed) over the standing foot. Skirts swing with it. Keep travel lyrical: about 6 m takes 3 bars.
+- Off stage: a dancer whose position is beyond 1.3x the clearing (scene `clearing_m`) is hidden in the forest, so
+  entrances and exits are just timeline travel to or from such a spot.
 - Check every clip after choreography changes: `python3 toolkit/tools/check_motion.py build/<clip>` samples all
   dancers at 30 fps (no rendering) and lists what a real dancer couldn't do: airborne (no foot on the floor), skate
   (a planted foot sliding), overreach (a leg too short for its target), spin/snap (turning too fast or reversing in a
-  frame), limb (a bone swinging too fast), speed (travel or acceleration) and crowd (bodies too close). Partners at
-  about 0.5 m and a gesture foot touching down for a frame or two are normal.
+  frame), limb (a bone swinging too fast), speed (travel or acceleration), crowd (bodies too close) and, for floor
+  work, sink (body pushed into the floor); "airborne" counts knees, hips, chest and hands as support. Partners at
+  about 0.5 m, leg kicks around 600-1100 deg/s and brief 6-10 m/s2 weight shifts into a gesture are normal.
 - Actors without a timeline keep the looping step pattern and the turn from the preview.
 
 ### Movement vocabulary: poses and phrases
+- **Floor work** (pose fields): `pitch` tilts the whole body forward at the pelvis (90 = face down);
+  `kneel: {left|right: [knee spot in metres forward of the dancer's spot, thigh angle from vertical]}` puts that knee
+  down with the shin along the floor (positive angle sits back toward the heels, 0 upright on the knees, -90 lying
+  flat); the pelvis goes where the kneeling thighs put it. Keep the knee spot the same across consecutive floor poses
+  (the knees stay put). Arms reaching into the floor rest on it. Base poses for getting up from lying face down, in
+  order: `prone`, `prone_lift`, `all_fours`, `child`, `sit_heels`, `sit_open`, `high_kneel`, `kneel_R`, then standing.
+  `wide`: metres each foot steps out (a wide stance; the feet step there).
+- Phrase keys take `dur` (counts the move into the pose takes) for slow floor work; a phrase with `"once": true`
+  plays once and holds its last pose (no loop back to the start).
 - **Poses** (base library in `engine/vocab.js`; a clip adds or overrides in `choreography.json` `poses`): `arms` (both) or
   `left`/`right` ([raise to side, raise forward, elbow forward, elbow in-plane, palm twist], as seen from the audience),
   `head` [bow, tilt], `torso` [bend forward, bend toward the audience's right, twist], `plie`/`releve` (0-1),

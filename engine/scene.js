@@ -103,6 +103,7 @@ if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
   const R=rng(J.seed), rr=(a,b)=>a+(b-a)*R(), pick=a=>a[Math.floor(R()*a.length)];
   const CX=J.clearing_center[0], CZ=J.clearing_center[1], RX=J.clearing_m[0], RZ=J.clearing_m[1];
   const ell=(x,z)=>Math.hypot((x-CX)/RX,(z-CZ)/RZ);         // 1 = edge of the clearing
+  ENV.ell=ell;
   camera.far=300; camera.updateProjectionMatrix();
   backdrop.visible=false; floor.visible=false;
   // keep the whole camera path clear: a corridor along the flight plus the view 3.5 m ahead of the lens
