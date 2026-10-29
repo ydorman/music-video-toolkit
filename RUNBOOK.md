@@ -52,7 +52,17 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   The first entry places the actor (no travel).
 - `face`: degrees (0 = audience), another actor's spot (tracked while either moves), an `[x,z]` point, or `"path"`
   (the direction of travel); turns blend over `turn_bars` (default 1). An entry without `face` keeps the last one.
-- Feet step on the accents (`track.json` `accents`) while an actor travels or turns, then plant; skirts swing with it.
+- Body and feet come from a motion track simulated once at load (engine/motion.js `motionTrack`), so they obey what a
+  body can do: the facing is reached at a limited turn rate and acceleration (150 deg/s, no snapping or reversing);
+  feet stay planted and step - landing on the counts, half counts when travelling fast, strides of at most 55 cm,
+  alternating - whenever the body has moved or turned away from them; no step while spinning or up on releve; a leg
+  gesture gives way (over about 0.8 s) before the body travels; the hips lower just enough that a standing leg always
+  reaches the floor. Skirts swing with it.
+- Check every clip after choreography changes: `python3 toolkit/tools/check_motion.py build/<clip>` samples all
+  dancers at 30 fps (no rendering) and lists what a real dancer couldn't do: airborne (no foot on the floor), skate
+  (a planted foot sliding), overreach (a leg too short for its target), spin/snap (turning too fast or reversing in a
+  frame), limb (a bone swinging too fast), speed (travel or acceleration) and crowd (bodies too close). Partners at
+  about 0.5 m and a gesture foot touching down for a frame or two are normal.
 - Actors without a timeline keep the looping step pattern and the turn from the preview.
 
 ### Movement vocabulary: poses and phrases
