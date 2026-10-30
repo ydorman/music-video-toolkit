@@ -3,6 +3,14 @@ const playBtn=document.getElementById('play'), scrub=document.getElementById('sc
 let dragging=false;
 playBtn.onclick=()=>{ if(au.paused) au.play(); else au.pause(); };
 au.onplay=()=>playBtn.textContent='Pause'; au.onpause=()=>playBtn.textContent='Play';
+// frame by frame: pause, then step 1/30 s (the frame rate check_motion samples at); shift steps a second
+const FRAME=1/30;
+function step(n){ au.pause(); const t=Math.round((au.currentTime||0)/FRAME+n)*FRAME; au.currentTime=clamp(t,0,F.duration); }
+document.getElementById('stepBack').onclick=e=>step(e.shiftKey?-30:-1);
+document.getElementById('stepFwd').onclick=e=>step(e.shiftKey?30:1);
+document.addEventListener('keydown',e=>{ if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)&&document.activeElement!==scrub) return;
+  const k=e.key; if(k===','||k==='ArrowLeft'){ e.preventDefault(); step(e.shiftKey?-30:-1); } else if(k==='.'||k==='ArrowRight'){ e.preventDefault(); step(e.shiftKey?30:1); }
+  else if(k===' '&&document.activeElement.tagName!=='BUTTON'){ e.preventDefault(); playBtn.onclick(); } });
 scrub.addEventListener('input',()=>{dragging=true; au.currentTime=+scrub.value;});
 scrub.addEventListener('change',()=>{dragging=false;});
 const setBar=(id,v)=>{document.getElementById('b'+id).style.width=(v*100)+'%'; document.getElementById('m'+id).textContent=v.toFixed(2);};
@@ -43,7 +51,7 @@ function loop(){
   const t=au.currentTime||0;
   const f=animate(t);
   if(!dragging) scrub.value=t;
-  timeEl.textContent=fmtTime(t)+'  ('+t.toFixed(1)+' s)';
+  timeEl.textContent=au.paused?fmtTime(t)+'  ('+t.toFixed(2)+' s, frame '+Math.round(t/FRAME)+')':fmtTime(t)+'  ('+t.toFixed(1)+' s)';
   setBar('R',f.rms); setBar('C',f.cent); setBar('F',f.flat);
   document.getElementById('mB').textContent=(f.countInBar+1)+' of '+CPB; const sc=sectionAt(t); if(sc) secEl.textContent=sc.name+' · bar '+(sc.bar+1)+' of '+SECTIONS[sc.index].bars; [...secBox.children].forEach((b,i)=>b.classList.toggle('on',!!sc&&sc.index===i));
   [...dots.children].forEach((s,i)=>s.classList.toggle('on',i===f.countInBar));

@@ -7,9 +7,11 @@ and reports what no real dancer could do. Usage: check_motion.py <build dir> [--
   overreach  a leg asked to reach further than it is long (the foot comes off its target)
   spin       the body turns faster than 720 deg/s (two turns a second, a fast pirouette)
   snap       the turning direction reverses abruptly (turning left, then right a moment later)
+  dart       a stepping foot moving much faster than a walk swings it (a flick)
   limb       a bone swings faster than a limb can move
   speed      the body travels faster than a lyrical walk / accelerates impossibly
   crowd      two dancers closer than their bodies allow
+  through    an arm or head passing into another dancer's torso or head
 """
 import asyncio, json, math, os, sys, argparse
 from playwright.async_api import async_playwright
@@ -39,6 +41,11 @@ SAMPLE="""(([t0,t1,fps])=>{
       const tm=timing(d.i,t,outroW(t)); o.yaw=tm.rot;
       o.q=BONES.map(b=>{ d.bones[b].getWorldQuaternion(q); return [q.x,q.y,q.z,q.w]; });
       o.reach=['L','R'].map(sd=>(d.ikMiss||{})[sd]||0);   // how far the IK target was out of the leg's reach (m)
+      // body-through-body: this dancer's torso (pelvis to neck) and head, and the points that most often reach into a partner
+      o.cap=[pos('spine05'),pos('neck02')]; const hd=pos('head'); o.headc=[hd[0],hd[1]+0.09*s/d.sc*d.sc,hd[2]];
+      o.pts=['lowerarm01.L','lowerarm01.R','wrist.L','wrist.R','head'].map(pos);
+      ['L','R'].forEach(sd=>{ const a=pos('lowerarm01.'+sd), b=pos('wrist.'+sd); o.pts.push(a.map((x,j)=>(x+b[j])/2)); });
+      o.pts.push(o.headc);
       o.spot=CFG[d.i].spot; fr.d.push(o); });
     out.push(fr); }
   const S=SECTIONS.map(x=>[x.name, atTime(x.name)]);
@@ -56,6 +63,11 @@ async def sample():
         res=await pg.evaluate(SAMPLE,[A.t0,A.t1,A.fps]); await b.close()
         if errs: print('page errors:',errs[:3])
         return res
+
+def dist(p,q): return math.dist(p,q)
+def segdist(p,a,b):
+    ab=[b[j]-a[j] for j in range(3)]; L=sum(x*x for x in ab) or 1e-9
+    u=max(0,min(1,sum((p[j]-a[j])*ab[j] for j in range(3))/L)); return math.dist(p,[a[j]+ab[j]*u for j in range(3)])
 
 def qang(a,b):
     d=abs(sum(x*y for x,y in zip(a,b))); return 2*math.acos(min(1,d))
@@ -88,6 +100,9 @@ def check(res):
             if abs(w-w2)/dt>math.radians(3000): add('snap',t,math.degrees(w2-w)/dt,f'turn rate changes {math.degrees(abs(w2-w)):.0f} deg/s within one frame')
             v1=[(b['root'][j]-a['root'][j])/dt for j in (0,2)]; v2=[(c['root'][j]-b['root'][j])/dt for j in (0,2)]
             sp=math.hypot(*v1)
+            for s2 in (0,1):   # a swinging foot faster than a walk swings it: the leg flicks
+                fv=math.hypot(b['foot'][s2][0]-a['foot'][s2][0],b['foot'][s2][2]-a['foot'][s2][2])/dt
+                if fv>max(2.6,6*sp) and b['heel'][s2]<0.25: add('dart',t,fv,f'{"LR"[s2]} foot darts {fv:.1f} m/s (body {sp:.2f} m/s)')
             if sp>1.6: add('speed',t,sp,f'body travels {sp:.2f} m/s')
             acc=math.hypot(v2[0]-v1[0],v2[1]-v1[1])/dt
             if acc>6: add('speed',t,acc,f'body accelerates {acc:.1f} m/s2')
@@ -97,6 +112,13 @@ def check(res):
             for j in range(i+1,N):
                 o=F[k]['d'][j]; dd=math.hypot(b['root'][0]-o['root'][0],b['root'][2]-o['root'][2])
                 if dd<0.5: add('crowd',t,dd,f'{dd:.2f} m from {o["spot"]}')
+            for j in range(N):
+                if j==i: continue
+                o=F[k]['d'][j]
+                if math.hypot(b['root'][0]-o['root'][0],b['root'][2]-o['root'][2])>1.6: continue
+                deep=max(0.12+0.035-segdist(p,*o['cap']) for p in b['pts'])     # torso ~12 cm round, limb ~3.5 cm
+                deep=max(deep,max(0.09+0.035-dist(p,o['headc']) for p in b['pts'][:6]))
+                if deep>0.03: add('through',t,deep,f'reaches {deep*100:.0f} cm into {o["spot"]}')
     return issues
 
 def runs(issues):  # merge consecutive frames of the same kind into episodes

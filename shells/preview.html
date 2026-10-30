@@ -29,9 +29,10 @@ header p{margin:0;color:var(--muted)}
 .err{position:absolute;inset:0;display:grid;place-items:center;color:#bbb;padding:20px;text-align:center}
 .transport{display:flex;align-items:center;gap:12px;margin:12px 0 4px}
 button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:7px 16px}
+button.step{min-width:34px;padding-left:0;padding-right:0}
 button.play{min-width:84px;border-color:var(--brass);color:var(--brass);font-weight:600}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
-.time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:118px}
+.time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:118px;white-space:nowrap}
 input[type=range]{accent-color:var(--brass);width:100%}
 .scrub{flex:1}
 .readout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0 22px}
@@ -80,6 +81,8 @@ textarea{width:100%;min-height:140px;margin-top:10px;font:12px/1.4 ui-monospace,
   <div class="stage" id="stage" aria-label="Animated actors moving with the music"></div>
   <div class="transport">
     <button class="play" id="play">Play</button>
+    <button class="step" id="stepBack" title="Back one frame (, or left arrow; shift: 1 second)" aria-label="Back one frame">&#9664;</button>
+    <button class="step" id="stepFwd" title="Forward one frame (. or right arrow; shift: 1 second)" aria-label="Forward one frame">&#9654;</button>
     <span class="time" id="time">0:00.0</span>
     <input class="scrub" id="scrub" type="range" min="0" max="600" step="0.01" value="0" aria-label="Position in section">
   </div>

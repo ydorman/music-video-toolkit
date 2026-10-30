@@ -58,14 +58,25 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   most 55 cm otherwise, alternating, off the count when fallen behind - whenever the body has moved or turned away
   from them; no step while spinning on the spot, up on releve or kneeling; a leg gesture gives way (over about 0.8 s)
   before the body travels; the hips lower just enough that a standing leg always reaches the floor, and sway (at most
-  4 cm, smoothed) over the standing foot. Skirts swing with it. Keep travel lyrical: about 6 m takes 3 bars.
+  4 cm, smoothed) over the standing foot. Walking is its own gait: even pace (speeds up and slows down over at most
+  1.2 s), steps off the counts every ~0.42 s swing, strides up to 62 cm, heel peeling off first and meeting the floor
+  first, the pelvis riding highest over the standing leg; walking brings the dancer down off releve and drops leg
+  gestures. Keep travel lyrical: about 6 m takes 3 bars (about 0.6 m/s at most).
+- Personal space: wherever two dancers would come closer than their bodies and poses allow (a torso leaning toward
+  the other, a leg reaching toward them), their positions are pushed apart, smoothly over about 2 s. An arm meeting
+  another body rests on its surface instead of passing through.
+- Skirts: the hem is a damped spring (about 1.4 Hz) hanging from the hips; it trails travel and sway, flares with
+  turns and travel, and is carried out by a raised leg; the knees push it too, so no leg pokes through.
 - Off stage: a dancer whose position is beyond 1.3x the clearing (scene `clearing_m`) is hidden in the forest, so
   entrances and exits are just timeline travel to or from such a spot.
+- Preview: the ◀ ▶ buttons (or , . and the arrow keys; shift = 1 s) step one frame (1/30 s) and pause; the clock
+  then shows the frame number, so a faulty frame can be named exactly.
 - Check every clip after choreography changes: `python3 toolkit/tools/check_motion.py build/<clip>` samples all
   dancers at 30 fps (no rendering) and lists what a real dancer couldn't do: airborne (no foot on the floor), skate
   (a planted foot sliding), overreach (a leg too short for its target), spin/snap (turning too fast or reversing in a
   frame), limb (a bone swinging too fast), speed (travel or acceleration), crowd (bodies too close) and, for floor
-  work, sink (body pushed into the floor); "airborne" counts knees, hips, chest and hands as support. Partners at
+  work, sink (body pushed into the floor), through (an arm or head inside another dancer's torso or head) and dart
+  (a stepping foot flicking faster than a walk swings it); "airborne" counts knees, hips, chest and hands as support. Partners at
   about 0.5 m, leg kicks around 600-1100 deg/s and brief 6-10 m/s2 weight shifts into a gesture are normal.
 - Actors without a timeline keep the looping step pattern and the turn from the preview.
 
