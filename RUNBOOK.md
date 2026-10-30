@@ -59,14 +59,15 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   from them; no step while spinning on the spot, up on releve or kneeling; a leg gesture gives way (over about 0.8 s)
   before the body travels; the hips lower just enough that a standing leg always reaches the floor, and sway (at most
   4 cm, smoothed) over the standing foot. Walking is its own gait: even pace (speeds up and slows down over at most
-  1.2 s), steps off the counts every ~0.42 s swing, strides up to 62 cm, heel peeling off first and meeting the floor
+  1.2 s), one step per count landing on the count (a 0.3-0.5 s swing), strides up to 62 cm, heel peeling off first and meeting the floor
   first, the pelvis riding highest over the standing leg; walking brings the dancer down off releve and drops leg
   gestures. Keep travel lyrical: about 6 m takes 3 bars (about 0.6 m/s at most).
 - Personal space: wherever two dancers would come closer than their bodies and poses allow (a torso leaning toward
   the other, a leg reaching toward them), their positions are pushed apart, smoothly over about 2 s. An arm meeting
   another body rests on its surface instead of passing through.
-- Skirts: the hem is a damped spring (about 1.4 Hz) hanging from the hips; it trails travel and sway, flares with
-  turns and travel, and is carried out by a raised leg; the knees push it too, so no leg pokes through.
+- Skirts: the hem hangs from the hips like a damped pendulum (about 1.1 Hz, no overshoot): it trails the hips and
+  falls back to hang straight when they stop; it flares only while the body turns (with the square of the turning
+  speed) and drops within about a second after; a knee reaching forward or out pushes it just enough to stay covered.
 - Off stage: a dancer whose position is beyond 1.3x the clearing (scene `clearing_m`) is hidden in the forest, so
   entrances and exits are just timeline travel to or from such a spot.
 - Preview: the ◀ ▶ buttons (or , . and the arrow keys; shift = 1 s) step one frame (1/30 s) and pause; the clock

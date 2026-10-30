@@ -97,7 +97,7 @@ const pulseTime=n=>F.beat_offset+P.offsetMs/1000+(n+P.shift+F.bar_phase)*F.beat_
 // the timeline's facing is reached at a limited turn rate and acceleration (no snapping, no reversing on the spot);
 // feet stay planted and step - landing on the counts - whenever the body has moved or turned away from them; a leg in a
 // gesture (from the phrase) is free in the air and lands where the body is when it comes down.
-const WALK_SWING=0.42, MDT=1/60, TURN_MAX=150*D, TURN_ACC=320*D, STEP_ERR=0.09, LIFT=0.05;
+const MDT=1/60, TURN_MAX=150*D, TURN_ACC=320*D, STEP_ERR=0.09, LIFT=0.05;
 const OFFSTAGE=1.3;
 const KNEE_R=0.055, ANKLE_R=0.065, HIP_MIN=0.12, ELBOW_R=0.045, WRIST_R=0.035;   // floor work: joint heights when resting on the floor
 let MOT=null, MOT_KEY='';
@@ -172,12 +172,15 @@ function motionTrack(i){
       F2.forEach((f,si)=>{ const o=1-si; if(g[si]>0.9 || gAhead(o,k,Math.round(1.1/MDT))>0.02 || t-F2[o].last<0.12 || t-f.last<0.2) return;   // weight onto a foot before lifting the other; a foot that just landed stays
         const p=ds(si,k+Math.round(0.4/MDT)), err=Math.hypot(p[0]-f.x,p[1]-f.z)+0.12*Math.abs(angDiff(f.yaw,M.yaw[k]))-(f.last>F2[o].last?0.2:0);   // feet alternate
         if(err>be){ be=err; best=si; } });
-      if(best>=0){ const f=F2[best], kk=Math.min(n-1,k+12), fast=Math.hypot(M.px[kk]-M.px[k],M.pz[kk]-M.pz[k])/(12*MDT)>0.3, q=fast?2:1;
-        // walking: a steady gait, each swing WALK_SWING long (the foot moves at a few times the body's speed, never darts);
-        // stepping in place while dancing: land on the next count
+      const kk=Math.min(n-1,k+12), fast=Math.hypot(M.px[kk]-M.px[k],M.pz[kk]-M.pz[k])/(12*MDT)>0.3; let t1=0;
+      if(best>=0){
+        // every step lands on a count: walking takes one step per count (about 0.55 s, a natural cadence), starting
+        // just early enough for a 0.3-0.5 s swing; stepping in place while dancing lands on the next count
         const walk=fast||M.mv[k]>0.5;
-        let t1=walk?t+WALK_SWING:pulseTime(Math.ceil(beatPos(t+0.4)-1e-6)); if(t1-t>0.95) t1=t+0.6;
-        const p=ds(best,Math.round((t1+(walk?0.1:0.25)-t0)/MDT)), dx=p[0]-f.x, dz=p[1]-f.z, dl=Math.hypot(dx,dz), SM=walk?0.62:0.55, c=dl>SM?SM/dl:1;   // a stride is at most 55 cm (72 walking)
+        t1=pulseTime(Math.ceil(beatPos(t+(walk?0.3:0.4))-1e-6)); if(t1-t>0.95) t1=t+0.6;
+        if(walk && t1-t>0.5) best=-1; }
+      if(best>=0){ const f=F2[best], walk=fast||M.mv[k]>0.5;
+        const p=ds(best,Math.round((t1+(walk?0.1:0.25)-t0)/MDT)), dx=p[0]-f.x, dz=p[1]-f.z, dl=Math.hypot(dx,dz), SM=walk?0.62:0.55, c=dl>SM?SM/dl:1;   // a stride is at most 55 cm (62 walking)
         f.sw={t0:t,t1,fx:f.x,fz:f.z,tx:f.x+dx*c,tz:f.z+dz*c,lift:LIFT+0.07*clamp(dl*c/0.6)}; } }
     F2.forEach((f,si)=>{ let x=f.x, z=f.z, l=0;
       let ph=0; if(f.sw){ const u=clamp((t-f.sw.t0)/(f.sw.t1-f.sw.t0)), e=(1-Math.cos(Math.PI*u))/2; x=lerp(f.sw.fx,f.sw.tx,e); z=lerp(f.sw.fz,f.sw.tz,e); l=Math.sin(Math.PI*u)*f.sw.lift; ph=u; }   // a longer stride lifts the foot higher (the knee bends through the swing)
@@ -187,17 +190,15 @@ function motionTrack(i){
       x+=(M.x[o][k]-M.px[k])*w; z+=(M.z[o][k]-M.pz[k])*w; }); const l=Math.hypot(x,z), c=l>0.04?0.04/l:1; rx[k]=x*c; rz[k]=z*c; }
   const box=(a,b)=>{ const R=Math.round(0.15/MDT); let s=0; for(let k=-R;k<n;k++){ if(k+R<n) s+=a[k+R]; if(k-R-1>=0) s-=a[k-R-1]; if(k>=0) b[k]=s/(2*R+1); } };
   const tx=A(), tz=A(); box(rx,tx); box(rz,tz); box(tx,M.sx); box(tz,M.sz);
-  // skirt: the hem is a damped spring (about 1.4 Hz) hanging from the hips - it trails their travel and sway, flares as
-  // the body turns or travels, and is carried out and up by a raised leg - so the cloth never jumps
-  const SW=2*Math.PI*1.4, SZ=0.5; M.hx=A(); M.hz=A(); M.fl=A();
+  // skirt: the hem hangs from the hips like a pendulum (about 1.1 Hz, damped so it settles in a swing or so without
+  // overshooting): it trails the hips when they move and falls back to hang straight when they stop. It flares out only
+  // while the body turns (centrifugal, with the square of the turning speed) and drops again under gravity after.
+  const SW=2*Math.PI*1.1, SZ=0.8, FW=2*Math.PI*1.4, FZ=0.9; M.hx=A(); M.hz=A(); M.fl=A();
   let hx=M.px[0], hz=M.pz[0], vx=0, vz=0, fl=0, fv=0;
-  for(let k=0;k<n;k++){ const z=PZK[k], y=M.yaw[k], ix=M.px[k]+M.sx[k], iz=M.pz[k]+M.sz[k]; let lx=0, lz=0, ll=0;
-    if(z) [[z.legR,1],[z.legL,-1]].forEach(([g,sd])=>{ const h=Math.sin(Math.min(g[1],90)*D)*(1-clamp(M.mv[k]*2)); if(h<=0) return;   // bone L = audience right
-      const fx=Math.cos(g[0]*D), ox=Math.sin(g[0]*D)*sd, r=_rotXZ(ox,fx,y); lx+=r[0]*0.2*h; lz+=r[1]*0.2*h; ll=Math.max(ll,h); });
-    vx+=(SW*SW*(ix+lx-hx)-2*SZ*SW*vx)*MDT; vz+=(SW*SW*(iz+lz-hz)-2*SZ*SW*vz)*MDT; hx+=vx*MDT; hz+=vz*MDT;
-    const w=k>0?Math.abs(angDiff(M.yaw[k-1],y))/MDT:0, sp=k>0?Math.hypot(M.px[k]-M.px[k-1],M.pz[k]-M.pz[k-1])/MDT:0;
-    const ft=0.8*clamp(w/(2*Math.PI*1.5))+0.5*clamp(sp/0.6)+0.7*ll;
-    fv+=(SW*SW*(ft-fl)-2*SZ*SW*fv)*MDT; fl+=fv*MDT;
+  for(let k=0;k<n;k++){ const y=M.yaw[k], ix=M.px[k]+M.sx[k], iz=M.pz[k]+M.sz[k];
+    vx+=(SW*SW*(ix-hx)-2*SZ*SW*vx)*MDT; vz+=(SW*SW*(iz-hz)-2*SZ*SW*vz)*MDT; hx+=vx*MDT; hz+=vz*MDT;
+    const w=k>0?Math.abs(angDiff(M.yaw[k-1],y))/MDT:0, ft=0.9*clamp((w/(2*Math.PI*1.2))**2);
+    fv+=(FW*FW*(ft-fl)-2*FZ*FW*fv)*MDT; fl+=fv*MDT;
     M.hx[k]=hx-ix; M.hz[k]=hz-iz; M.fl[k]=Math.max(0,fl); }
   return M;
 }
@@ -482,13 +483,13 @@ function animate(t){
     rotWorld(d.bones.neck02,new THREE.Quaternion().setFromAxisAngle(xr,hb*0.5*D));
     rotWorld(d.bones.head,new THREE.Quaternion().setFromAxisAngle(xr,hb*0.5*D).multiply(new THREE.Quaternion().setFromAxisAngle(zr,-ht*D)));
     if(d.robeMesh){ const mi=d.robeMesh.morphTargetInfluences;
-      if(mi.length>1 && P.swing>0 && feet){ const m=motionAt(d.i,ti), c=Math.cos(-rot), sn=Math.sin(-rot), g=1.6*P.swing;   // the hem's spring, into the body's own frame
-        let x=(c*m.hx+sn*m.hz)*g, z=(-sn*m.hx+c*m.hz)*g; const L=Math.hypot(x,z); if(L>0.3){ x*=0.3/L; z*=0.3/L; }
+      if(mi.length>1 && P.swing>0 && feet){ const m=motionAt(d.i,ti), c=Math.cos(-rot), sn=Math.sin(-rot), g=P.swing;   // the hem's pendulum, into the body's own frame
+        let x=(c*m.hx+sn*m.hz)*g, z=(-sn*m.hx+c*m.hz)*g; const L=Math.hypot(x,z); if(L>0.12){ x*=0.12/L; z*=0.12/L; }
         // the knees: a knee reaching forward or out (a walking step, a gesture) carries the hem with it, so no leg pokes through
         let kx=0, kz=0, kf=0; const pv=d.bones.root.getWorldPosition(new THREE.Vector3());
         ['L','R'].forEach(sd=>{ const K=d.bones['lowerleg01.'+sd].getWorldPosition(new THREE.Vector3()).sub(pv), bx=c*K.x+sn*K.z, bz=-sn*K.x+c*K.z, l=Math.hypot(bx,bz), ex=Math.max(0,l-0.1);
-          if(ex>0){ kx+=bx/l*ex*0.7; kz+=bz/l*ex*0.7; kf=Math.max(kf,ex*2.2); } });
-        x+=kx; z+=kz;
+          if(ex>0){ kx+=bx/l*ex*0.6; kz+=bz/l*ex*0.6; kf=Math.max(kf,ex*1.2); } });   // just enough to keep the knee covered
+        x+=kx; z+=kz; const L2=Math.hypot(x,z); if(L2>0.2){ x*=0.2/L2; z*=0.2/L2; }
         mi[0]=clamp(P.skirt+P.swing*m.fl+kf,0,1.6); mi[1]=x/d.sc; mi[2]=z/d.sc; }
       else if(mi.length>1 && P.swing>0){ const sw=skirtSwing(d.i,t,{cx,cz,rot}); mi[0]=clamp(P.skirt+sw.flare,0,1.6); mi[1]=sw.x/d.sc; mi[2]=sw.z/d.sc; }
       else { mi[0]=P.skirt; if(mi.length>1) mi[1]=mi[2]=0; } }
