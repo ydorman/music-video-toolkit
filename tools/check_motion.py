@@ -11,6 +11,7 @@ and reports what no real dancer could do. Usage: check_motion.py <build dir> [--
   limb       a bone swings faster than a limb can move
   speed      the body travels faster than a lyrical walk / accelerates impossibly
   crowd      two dancers closer than their bodies allow
+  grip       hands that are held drift apart
   through    an arm or head passing into another dancer's torso or head
 """
 import asyncio, json, math, os, sys, argparse
@@ -47,6 +48,9 @@ SAMPLE="""(([t0,t1,fps])=>{
       ['L','R'].forEach(sd=>{ const a=pos('lowerarm01.'+sd), b=pos('wrist.'+sd); o.pts.push(a.map((x,j)=>(x+b[j])/2)); });
       o.pts.push(o.headc);
       o.spot=CFG[d.i].spot; fr.d.push(o); });
+    fr.holds=(typeof HOLDS==='undefined'?[]:HOLDS).filter(h=>holdW(h,t)>0.9).flatMap(h=>holdHands(h).map(([sa,sb])=>{   // held hands: how far apart the wrists are
+      const a=dancers[h.ia].bones['wrist.'+sa].getWorldPosition(new THREE.Vector3()), b=dancers[h.ib].bones['wrist.'+sb].getWorldPosition(new THREE.Vector3());
+      return [h.ia,CFG[h.ib].spot,a.distanceTo(b)]; }));
     out.push(fr); }
   const S=SECTIONS.map(x=>[x.name, atTime(x.name)]);
   return {frames:out, sections:S};
@@ -86,6 +90,8 @@ def check(res):
         def add(kind,t,val,msg): issues.append({'kind':kind,'spot':spot,'t':round(t,2),'section':sec(t),'value':round(val,3),'msg':msg})
         for k in range(1,len(F)-1):
             a,b,c=F[k-1]['d'][i],F[k]['d'][i],F[k+1]['d'][i]; t=F[k]['t']
+            for hi,other,gap in F[k].get('holds',[]):
+                if hi==i and gap>0.13: add('grip',t,gap,f'hand held with {other} {gap*100:.0f} cm from it (arm too short or pulled away)')
             low=min(min(b['lift']),min(b['body']))
             if low>0.025: add('airborne',t,low,f'nothing on the ground (lowest point {low*100:.0f} cm up)')
             sink=min(b['body'])

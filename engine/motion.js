@@ -62,6 +62,7 @@ const ACC=new Set((TRACK.accents||[1]).map(a=>((a-1)%CPB+CPB)%CPB));
 const TLD=CFG.map(c=>{ const L=CHOREO.timeline&&CHOREO.timeline[c.spot]; if(!L||!L.length) return null; const bar=CPB*F.beat_period;
   return L.map(e=>({T:atTime(e.at), dur:(e.bars===undefined?2:e.bars)*bar, to:e.to||null, face:e.face, turnDur:(e.turn_bars===undefined?1:e.turn_bars)*bar,
     phrase:e.phrase, phraseBlend:(e.phrase_blend===undefined?0.5:e.phrase_blend)*bar})).sort((a,b)=>a.T-b.T); });
+const SPOT_I={}; CFG.forEach((c,i)=>SPOT_I[c.spot]=i);
 const angDiff=(a,b)=>{ let d=(b-a)%(2*Math.PI); if(d>Math.PI) d-=2*Math.PI; if(d<-Math.PI) d+=2*Math.PI; return d; };
 // travel: speed up over at most 1.2 s, walk at an even pace, slow down over at most 1.2 s (a long eased glide would
 // speed the walk up and down all the way)
@@ -102,13 +103,48 @@ const OFFSTAGE=1.3;
 const KNEE_R=0.055, ANKLE_R=0.065, HIP_MIN=0.12, ELBOW_R=0.045, WRIST_R=0.035;   // floor work: joint heights when resting on the floor
 let MOT=null, MOT_KEY='';
 const _rotXZ=(x,z,a)=>[x*Math.cos(a)+z*Math.sin(a), -x*Math.sin(a)+z*Math.cos(a)];
+// ---------- holds (choreography.json "holds"): partners holding hands. Each entry {at, bars (default 1), pair: [a, b],
+// hands: "near" (default: each the hand nearer the other) | "both" (facing, two hands) | [a's hand, b's hand] ("left" /
+// "right", the dancer's own), height: "low" | "chest" | "high" (raised over b's head), turn: degrees b turns under the
+// raised hands (a walking turn), blend (bars to take hold and let go, default 0.25)}. Both arms reach for one shared
+// point, so the hands stay joined whatever the bodies do; personal space keeps the pair within reach.
+const HOLDS=(CHOREO.holds||[]).map(h=>{ const ia=SPOT_I[h.pair[0]], ib=SPOT_I[h.pair[1]]; if(ia===undefined||ib===undefined||!TLD[ia]||!TLD[ib]) return null;
+  const bar=CPB*F.beat_period, T0=atTime(h.at), T1=T0+(h.bars===undefined?1:h.bars)*bar, bl=Math.min((h.blend===undefined?0.25:h.blend)*bar,(T1-T0)/3);
+  const height=h.height||'low', maxD=height==='high'?0.74:h.hands==='both'?0.85:0.9, minD=height==='high'?0.6:0.48;   // a turn under the hands needs room for her shoulders to sweep round
+  let hands;
+  if(Array.isArray(h.hands)) hands=[h.hands.map(x=>x[0].toUpperCase())];
+  else if(h.hands==='both') hands=[['R','L'],['L','R']];
+  else hands=null;   // "near": chosen from how the pair stands over the whole hold (holdHands)
+  return {ia,ib,T0,T1,bl,height,maxD,minD,hands,turn:(h.turn||0)*D};
+}).filter(Boolean);
+const holdW=(h,t)=>t<=h.T0||t>=h.T1?0:Math.min(ease(clamp((t-h.T0)/h.bl)),ease(clamp((h.T1-t)/h.bl)));
+function holdSpin(i,t){ let s=0; HOLDS.forEach(h=>{ if(h.ib===i&&h.turn&&t>h.T0) s+=h.turn*ease(clamp((t-h.T0-h.bl)/Math.max(1e-3,h.T1-h.T0-2*h.bl))); }); return s; }
+function holdHands(h){   // "near": the hands on the sides facing each other, by majority over the hold (bone L = own left = body +x)
+  if(h.hands) return h.hands;
+  const near=(m,q)=>((q.px-m.px)*Math.cos(m.yaw)-(q.pz-m.pz)*Math.sin(m.yaw))>0?'L':'R', votes={};
+  for(let t=h.T0+h.bl; t<=h.T1-h.bl+1e-6; t+=0.2){ const a=motionAt(h.ia,t), b=motionAt(h.ib,t), k=near(a,b)+near(b,a); votes[k]=(votes[k]||0)+1; }
+  const k=Object.keys(votes).sort((x,y)=>votes[y]-votes[x])[0]||'RL'; return h.hands=[[k[0],k[1]]];
+}
+function holdTargets(t){   // {dancer index + bone side: {T: where the wrist goes, w: weight, j: partner}} for every hand held at t (bodies already posed)
+  const out={};
+  HOLDS.forEach(h=>{ const w=holdW(h,t); if(w<=0) return;
+    holdHands(h).forEach(([sa,sb])=>{ const A=dancers[h.ia].bones['upperarm01.'+sa].getWorldPosition(new THREE.Vector3()), B=dancers[h.ib].bones['upperarm01.'+sb].getWorldPosition(new THREE.Vector3());   // the posed shoulders
+      const arm=(i,sd)=>{ const r=dancers[i].rest; return (r['lowerarm01.'+sd].distanceTo(r['upperarm01.'+sd])+r['wrist.'+sd].distanceTo(r['lowerarm01.'+sd]))*dancers[i].sc*0.95; };
+      const H=A.clone().lerp(B,h.height==='high'?0.65:0.5), ok=(S,L)=>{ const hz=Math.hypot(S.x-H.x,S.z-H.z); return Math.sqrt(Math.max(0,L*L-hz*hz)); };   // how far up or down each arm can still reach
+      const v=Math.min(ok(A,arm(h.ia,sa)),ok(B,arm(h.ib,sb)));
+      H.y=h.height==='high'?Math.max(A.y,B.y)+Math.min(0.42,Math.max(0,v-Math.abs(A.y-B.y))):(A.y+B.y)/2-Math.min(h.height==='chest'?0.12:0.38,v);
+      const bodies=[...postedCaps(dancers[h.ia]),...postedCaps(dancers[h.ib])]; for(let it=0;it<3;it++) pushOut(H,bodies,0.06);   // the joined hands stay clear of both bodies
+      const ta=H.clone().addScaledVector(A.clone().sub(H).normalize(),0.03), tb=H.clone().addScaledVector(B.clone().sub(H).normalize(),0.03);   // the two hands side by side in the grip
+      out[h.ia+sa]={T:ta,w,j:h.ib}; out[h.ib+sb]={T:tb,w,j:h.ia}; }); });
+  return out;
+}
 // personal space: bodies never pass through each other. Where two dancers would come closer than their bodies and
 // poses allow (a torso leaning toward the other, a leg gesture reaching toward them), their timeline positions are
 // pushed apart - smoothly, starting before it is needed - and everything else (feet, turns) follows the pushed path.
 const SEP_DT=1/30, BODY_R=0.17;
 let SEP=null;
-function reachToward(z,yaw,dx,dz){   // metres the body reaches from its centre toward the unit direction (dx,dz)
-  if(!z) return BODY_R;
+function reachToward(z,yaw,dx,dz,walk){   // metres the body reaches from its centre toward the unit direction (dx,dz)
+  if(!z) return BODY_R; if(walk) return BODY_R+0.05;   // walking drops leg gestures and straightens up
   const f=[Math.sin(yaw),Math.cos(yaw)], df=f[0]*dx+f[1]*dz, ds=Math.abs(f[1]*dx-f[0]*dz), lean=clamp((z.torso[0]+z.pitch)/90,-1,1)*Math.PI/2;
   let e=BODY_R+(lean>0?Math.max(0,df)*0.55*Math.sin(lean):Math.max(0,-df)*0.4*Math.sin(-lean));
   [z.legL,z.legR].forEach(g=>{ if(g[1]<10) return; const h=0.9*Math.sin(Math.min(g[1],90)*D)*(1-0.42*g[2]), c=Math.cos(g[0]*D)*df+Math.abs(Math.sin(g[0]*D))*ds;
@@ -119,11 +155,15 @@ function separation(){
   const IDX=CFG.map((c,i)=>i).filter(i=>TLD[i]), t0=-2, n=Math.ceil((F.duration+8)/SEP_DT)+1, C={};
   IDX.forEach(i=>C[i]=[new Float32Array(n),new Float32Array(n)]);
   for(let k=0;k<n;k++){ const t=t0+k*SEP_DT, P={}, Z={}, Y={};
-    IDX.forEach(i=>{ P[i]=tlPos(i,t); Z[i]=poseAt(i,t); Y[i]=tlYaw(i,t)+phraseSpin(i,t); });
+    const Wk={}; IDX.forEach(i=>{ P[i]=tlPos(i,t); Z[i]=poseAt(i,t); Y[i]=tlYaw(i,t)+phraseSpin(i,t)+holdSpin(i,t);
+      const a=tlPos(i,t-0.4), b=tlPos(i,t+0.4); Wk[i]=Math.hypot(b[0]-a[0],b[1]-a[1])/0.8>0.12; });
     for(let a=0;a<IDX.length;a++) for(let b=a+1;b<IDX.length;b++){ const i=IDX[a], j=IDX[b];
       let dx=P[j][0]-P[i][0], dz=P[j][1]-P[i][1], d=Math.hypot(dx,dz); if(d>2.5) continue; if(d<1e-4){ dx=1; dz=0; d=1e-4; }
-      const ux=dx/d, uz=dz/d, need=reachToward(Z[i],Y[i],ux,uz)+reachToward(Z[j],Y[j],-ux,-uz)+0.05;
-      if(d<need){ const p=(need-d)/2; C[i][0][k]-=ux*p; C[i][1][k]-=uz*p; C[j][0][k]+=ux*p; C[j][1][k]+=uz*p; } } }
+      const ux=dx/d, uz=dz/d; let need=reachToward(Z[i],Y[i],ux,uz,Wk[i])+reachToward(Z[j],Y[j],-ux,-uz,Wk[j])+0.05;
+      HOLDS.forEach(h=>{ if(((h.ia===i&&h.ib===j)||(h.ia===j&&h.ib===i)) && holdW(h,t)>0) need=clamp(need,h.minD,h.maxD-0.08); });   // holding hands: never pushed out of reach, never so close the shoulders collide
+      if(d<need){ const p=(need-d)/2; C[i][0][k]-=ux*p; C[i][1][k]-=uz*p; C[j][0][k]+=ux*p; C[j][1][k]+=uz*p; }
+      HOLDS.forEach(h=>{ if(!((h.ia===i&&h.ib===j)||(h.ia===j&&h.ib===i))) return; const w=holdW(h,t);   // holding hands: within reach
+        if(w>0 && d>h.maxD){ const p=(d-h.maxD)/2*w; C[i][0][k]+=ux*p; C[i][1][k]+=uz*p; C[j][0][k]-=ux*p; C[j][1][k]-=uz*p; } }); } }
   const R=Math.round(1.0/SEP_DT), dil=a=>{ const o=new Float32Array(n);   // widest push within +-1 s, then averaged over it: never less than needed
     for(let k=0;k<n;k++){ let m=0; for(let j=Math.max(0,k-R);j<=Math.min(n-1,k+R);j++) if(Math.abs(a[j])>Math.abs(m)) m=a[j]; o[k]=m; } return o; };
   const box=a=>{ const o=new Float32Array(n); let s=0; for(let k=-R;k<n;k++){ if(k+R<n) s+=a[k+R]; if(k-R-1>=0) s-=a[k-R-1]; if(k>=0) o[k]=s/(2*R+1); } return o; };
@@ -149,7 +189,7 @@ function motionTrack(i){
       if(tgt!==null){ let dl=angDiff(y,tgt); if(Math.abs(dl)>2.6 && w*dl<0) dl-=Math.sign(dl)*2*Math.PI;   // keep turning the way it was going
         wd=clamp(dl/Math.max(0.25,L[e].turnDur/3),-TURN_MAX,TURN_MAX); }
       w+=clamp(wd-w,-TURN_ACC*MDT,TURN_ACC*MDT); y+=w*MDT; }
-    M.yaw[k]=y+phraseSpin(i,t);
+    M.yaw[k]=y+phraseSpin(i,t)+holdSpin(i,t);   // a turn under the hands is a walking turn: the feet step round
     if(k>0) mvRaw[k]=(Math.hypot(p[0]-M.px[k-1],p[1]-M.pz[k-1])/MDT>0.04 || Math.abs(w)>0.3)?1:0; }
   const R=Math.round(0.8/MDT); let acc=0;      // walking weight: travel or turning, smoothed over +-0.8 s
   for(let k=-R;k<n;k++){ if(k+R<n) acc+=mvRaw[k+R]; if(k-R-1>=0) acc-=mvRaw[k-R-1]; if(k>=0) M.mv[k]=acc/(2*R+1); }
@@ -307,7 +347,7 @@ function skirtSwing(i,t,now){
 // sash colours: each actor with a sash_color (actors.csv) always wears it; choreography.json "partners" lists, from a
 // given time ("at", like scene.json), who is paired with whom; the other actor's sash blends to that colour over "blend"
 // bars, and an actor in no pair fades back to neutral (the lone one)
-const SASH_OWN=CFG.map(c=>c.sash?new THREE.Color(c.sash):null), SPOT_I={}; CFG.forEach((c,i)=>SPOT_I[c.spot]=i);
+const SASH_OWN=CFG.map(c=>c.sash?new THREE.Color(c.sash):null);
 const PARTNERS=(CHOREO.partners||[]).map(e=>{ const take=CFG.map(()=>null);
     (e.pairs||[]).forEach(([a,b])=>{ const ia=SPOT_I[a], ib=SPOT_I[b]; if(ia===undefined||ib===undefined) return;
       if(SASH_OWN[ib]&&!SASH_OWN[ia]) take[ia]=SASH_OWN[ib]; if(SASH_OWN[ia]&&!SASH_OWN[ib]) take[ib]=SASH_OWN[ia]; });
@@ -335,6 +375,10 @@ function bodyCaps(d,t){
   const hip=new THREE.Vector3(m.px+m.sx+r.root.x*d.sc+o.x,hipY-drop,m.pz+m.sz+r.root.z*d.sc+o.z), top=hip.clone().add(new THREE.Vector3(0,(topY-hipY)*Math.cos(lean),0)).addScaledVector(f,(topY-hipY)*Math.sin(lean));
   const head=top.clone().add(top.clone().sub(hip).normalize().multiplyScalar(0.16));
   return [{a:new THREE.Vector3(hip.x,0.35,hip.z),b:hip,r:0.15},{a:hip,b:top,r:0.15},{a:head,b:head,r:0.12}];
+}
+function postedCaps(d){   // a dancer's body as posed this frame: legs, torso, head
+  const b=d.bones, P=n=>b[n].getWorldPosition(new THREE.Vector3()), hip=P('spine05'), knees=P('lowerleg01.L').add(P('lowerleg01.R')).multiplyScalar(0.5), head=P('head'); head.y+=0.09;
+  return [{a:knees,b:hip,r:0.14},{a:hip,b:P('neck02'),r:0.15},{a:head,b:head,r:0.12}];
 }
 const _ab=new THREE.Vector3(), _pc=new THREE.Vector3();
 function pushOut(p,caps,pad){   // move point p (in place) out of the capsules, plus pad (the limb's own thickness)
@@ -373,7 +417,7 @@ function animate(t){
   }
   // ---- dancers
   const pb0=beatPos(t), countInBar=Math.floor(((pb0%CPB)+CPB)%CPB);
-  const CAPS=dancers.map(d=>{ if(!TLD[d.i]) return []; const m=motionAt(d.i,t-LAG[d.i]*P.loose); return ENV.ell&&ENV.ell(m.px,m.pz)>=OFFSTAGE?[]:bodyCaps(d,t); });
+  const FIN=[];   // two passes: every body first, then arms (held hands need both partners' real shoulders)
   dancers.forEach(d=>{
     d.robeMat.color.copy(d.robeBase).lerp(tintC,P.tint*0.25); d.mats.sash.color.copy(d.robeMat.color).multiplyScalar(0.86);
     const sc=sashAt(d.i,t); if(sc) d.mats.sash.color.lerp(sc[0],sc[1]*P.sashTint);
@@ -421,7 +465,6 @@ function animate(t){
       tgt.multiplyScalar(1/ws).sub(mid).multiplyScalar(KW);
       root.position.add(tgt.multiplyScalar(1/d.sc)); d.group.updateMatrixWorld(true); }
     const xr=new THREE.Vector3(1,0,0).applyQuaternion(yawQ), zr=new THREE.Vector3(0,0,1).applyQuaternion(yawQ);
-    const me=root.getWorldPosition(new THREE.Vector3()), near=[]; CAPS.forEach((c,j)=>{ if(j!==d.i && c.length && Math.hypot(c[1].a.x-me.x,c[1].a.z-me.z)<1.6) near.push(...c); });
     // a slight personal lean
     rotWorld(d.bones.spine03,new THREE.Quaternion().setFromAxisAngle(zr,TILT[d.i]*0.006));
     // torso: bend forward, to the side (toward the audience's right), twist; spread over three spine bones
@@ -457,6 +500,8 @@ function animate(t){
         o.pole=(o.pole||fwd.clone()).lerp(K.clone().sub(hip).normalize(),w).normalize(); o.point=fwd.clone().negate(); o.pointW=w; }
       legIK(d,side,T,yawQ,o);
     });
+    FIN.push(()=>{
+    const me=root.getWorldPosition(new THREE.Vector3()), near=[]; RC.forEach((c,j)=>{ if(j!==d.i && c.length && Math.hypot(c[1].a.x-me.x,c[1].a.z-me.z)<1.6) near.push(...c); });   // the other bodies as posed this frame
     // arms
     const qa=PZ?{L:lerpArm(armOf(PZ.L),FINAL.L,oW), R:lerpArm(armOf(PZ.R),FINAL.R,oW)}
               :{L:lerpArm(lerpArm(prev.L,cur.L,k),FINAL.L,oW), R:lerpArm(lerpArm(prev.R,cur.R,k),FINAL.R,oW)};
@@ -470,8 +515,18 @@ function animate(t){
       const r=d.rest, S=b['upperarm01.'+side].getWorldPosition(new THREE.Vector3());   // an arm reaching into the floor rests on it
       const Lu=r['lowerarm01.'+side].distanceTo(r['upperarm01.'+side])*d.sc, Lf=r['wrist.'+side].distanceTo(r['lowerarm01.'+side])*d.sc;
       let El=floorDir(S,upD,Lu,ELBOW_R,fwd); floorDir(El,foD,Lf,WRIST_R,fwd);
-      if(near.length){ const E2=pushOut(El.clone(),near,0.05); upD.copy(E2.sub(S)).normalize(); El=S.clone().addScaledVector(upD,Lu);   // an arm meeting another body rests on it instead of passing through
-        for(let it=0;it<2;it++){ const M=El.clone().addScaledVector(foD,Lf*0.5), W=El.clone().addScaledVector(foD,Lf);
+      const ht=HT[d.i+side];
+      if(ht){ const dv=ht.T.clone().sub(S), dist=Math.min(dv.length(),(Lu+Lf)*0.999), dir=dv.normalize();   // holding a hand: two-bone reach to the grip, elbow down and out
+        const a=(Lu*Lu-Lf*Lf+dist*dist)/(2*dist), hh=Math.sqrt(Math.max(0,Lu*Lu-a*a));
+        const pole=new THREE.Vector3(0,-1,0).addScaledVector(xr,s*0.7).addScaledVector(fwd,-0.2); pole.addScaledVector(dir,-pole.dot(dir)).normalize();
+        let E=S.clone().addScaledVector(dir,a).addScaledVector(pole,hh);
+        if(near.length){ for(let it=0;it<3;it++){ const M=E.clone().lerp(ht.T,0.5), M2=pushOut(M.clone(),near,0.045);   // the elbow bends round the partner's body, the hand stays in the grip
+            const E2=pushOut(E.clone(),near,0.05).add(M2.sub(M)); E=S.clone().addScaledVector(E2.sub(S).normalize(),Lu); } }
+        upD.lerp(E.clone().sub(S).normalize(),ht.w).normalize(); foD.lerp(ht.T.clone().sub(E).normalize(),ht.w).normalize();
+        El=S.clone().addScaledVector(upD,Lu); }
+      if(near.length && !(ht&&ht.w>0.95)){   // an arm meeting another body rests on it instead of passing through (also while taking hold or letting go)
+        for(let it=0;it<3;it++){ const E2=pushOut(El.clone(),near,0.05); upD.copy(E2.sub(S)).normalize(); El=S.clone().addScaledVector(upD,Lu); }
+        for(let it=0;it<3;it++){ const M=El.clone().addScaledVector(foD,Lf*0.5), W=El.clone().addScaledVector(foD,Lf);
           pushOut(M,near,0.045); pushOut(W,near,0.06); foD.copy(W.sub(El).normalize().add(M.sub(El).normalize())).normalize(); } }
       aim(b['upperarm01.'+side],b['lowerarm01.'+side],upD);
       aim(b['lowerarm01.'+side],b['wrist.'+side],foD);
@@ -494,7 +549,10 @@ function animate(t){
       else if(mi.length>1 && P.swing>0){ const sw=skirtSwing(d.i,t,{cx,cz,rot}); mi[0]=clamp(P.skirt+sw.flare,0,1.6); mi[1]=sw.x/d.sc; mi[2]=sw.z/d.sc; }
       else { mi[0]=P.skirt; if(mi.length>1) mi[1]=mi[2]=0; } }
     updateSleeves(d);
+    });
   });
+  const HT=HOLDS.length?holdTargets(t):{}, RC=dancers.map(d=>TLD[d.i]&&d.group.visible?postedCaps(d):[]);
+  FIN.forEach(f=>f());
   cameraUpdate(t);
   renderer.render(scene,camera);
   return {rms,cent,flat,countInBar};
