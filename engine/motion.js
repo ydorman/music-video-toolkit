@@ -6,9 +6,11 @@ function rotWorld(bone,qw){ // apply world-space rotation qw to bone
   bone.quaternion.premultiply(_qp).premultiply(qw).premultiply(_qi);
   bone.updateMatrixWorld(true);
 }
-function aim(bone,endBone,dirW,twist=0){
+function aim(bone,endBone,dirW,twist=0,via=null){
   bone.getWorldPosition(_a); endBone.getWorldPosition(_b); _c.subVectors(_b,_a).normalize();
   _q.setFromUnitVectors(_c,dirW);
+  if(via){ const m=_c.clone().add(dirW).add(via).normalize();   // a near half-turn has no defined twist: always swing by way of "via", so the twist never flips
+    _q.setFromUnitVectors(m,dirW).multiply(new THREE.Quaternion().setFromUnitVectors(_c,m)); }
   if(twist){ const t=new THREE.Quaternion().setFromAxisAngle(dirW,twist); _q.premultiply(t); }
   rotWorld(bone,_q);
 }
@@ -19,6 +21,7 @@ const A=(abd,flex,ex,ez,palm)=>({abd,flex,ex,ez,palm});
 const armOf=a=>A(...a);
 const SEQ=CHOREO.positions.map(s=>({name:s.name, L:armOf(s.left), R:armOf(s.right), head:s.head}));
 const STEPS=CHOREO.step_pattern;
+const TUCK=A(20,15,95,0,0);   // a free arm folded in, the hand in front of the waist
 const FINAL={L:armOf(CHOREO.final_pose.left), R:armOf(CHOREO.final_pose.right), head:CHOREO.final_pose.head};
 const NPOS=SEQ.length;
 const lerp2=(a,b,k)=>[lerp(a[0],b[0],k),lerp(a[1],b[1],k)];
@@ -38,7 +41,14 @@ function legIK(d,side,target,yawQ,o={}){
   const H=ul.getWorldPosition(new THREE.Vector3());
   const r=d.rest, sc=d.sc;
   const L1=r['lowerleg01.'+side].distanceTo(r['upperleg01.'+side])*sc, L2=r['foot.'+side].distanceTo(r['lowerleg01.'+side])*sc;
-  const T=target.clone(); let dv=T.clone().sub(H); (d.ikMiss=d.ikMiss||{})[side]=Math.max(0,dv.length()-(L1+L2)*0.999);
+  // the foot's direction (heel to ball): flat, pointing where the body points, unless rolled, on releve or pointed
+  const toe=b['toe3-1.'+side], Lb=r['toe3-1.'+side].distanceTo(r['foot.'+side])*sc; let rf=r['toe3-1.'+side].clone().sub(r['foot.'+side]).normalize().applyQuaternion(yawQ);
+  if(o.point) rf.lerp(o.point,o.pointW===undefined?1:o.pointW).normalize();      // pointed foot along the leg
+  if(o.roll){ const h=rf.clone().setY(0).normalize(); rf=h.multiplyScalar(Math.cos(o.roll)).add(new THREE.Vector3(0,-Math.sin(o.roll),0)).normalize(); }   // toes down (+) / up (-)
+  const T=target.clone();
+  if(o.releve){ const a0=restPitch(d,side), a=lerp(a0,1.05,o.releve), h=rf.clone().setY(0).normalize(); rf=h.multiplyScalar(Math.cos(a)).add(new THREE.Vector3(0,-Math.sin(a),0)).normalize();
+    T.y+=Lb*(Math.sin(a)-Math.sin(a0)); }   // up on the ball of the foot: the heel rises just as far as the ball stays down
+  let dv=T.clone().sub(H); (d.ikMiss=d.ikMiss||{})[side]=Math.max(0,dv.length()-(L1+L2)*0.999);
   let dist=Math.min(dv.length(),(L1+L2)*0.999); const dir=dv.normalize();
   const a=(L1*L1-L2*L2+dist*dist)/(2*dist), hh=Math.sqrt(Math.max(0,L1*L1-a*a));
   const fwd=o.pole?o.pole.clone():new THREE.Vector3(0,0,1).applyQuaternion(yawQ); const pole=fwd.sub(dir.clone().multiplyScalar(fwd.dot(dir))).normalize();
@@ -46,13 +56,18 @@ function legIK(d,side,target,yawQ,o={}){
   aim(ul,ll,K.clone().sub(H).normalize());
   const Kw=ll.getWorldPosition(new THREE.Vector3());
   aim(ll,ft,T.clone().sub(Kw).normalize());
-  // keep the foot flat, pointing where the body points
-  const toe=b['toe3-1.'+side]; let rf=r['toe3-1.'+side].clone().sub(r['foot.'+side]).normalize().applyQuaternion(yawQ);
-  if(o.point) rf.lerp(o.point,o.pointW===undefined?1:o.pointW).normalize();      // pointed foot along the leg
-  if(o.roll){ const h=rf.clone().setY(0).normalize(); rf=h.multiplyScalar(Math.cos(o.roll)).add(new THREE.Vector3(0,-Math.sin(o.roll),0)).normalize(); }   // toes down (+) / up (-)
-  if(o.releve){ const h=rf.clone().setY(0).normalize(); rf=h.multiplyScalar(Math.cos(o.releve*1.05)).add(new THREE.Vector3(0,-Math.sin(o.releve*1.05),0)).normalize(); }
   aim(ft,toe,rf);
+  // toes: on the floor they bend flat at the ball of the foot (releve, the heel peeling off in a step); in the air they stay in line
+  const tw=(1-(o.point?(o.pointW===undefined?1:o.pointW):0))*clamp((Math.asin(clamp(-rf.y,-1,1))-restPitch(d,side))/0.3)*clamp((r['toe3-1.'+side].y*sc+0.05-toe.getWorldPosition(_a).y)/0.04);
+  if(tw>0){ const h=rf.clone().setY(0).normalize();
+    for(let n=1;n<=5;n++){ const t1=b['toe'+n+'-1.'+side], t2=b['toe'+n+'-2.'+side]; if(!t1||!t2) continue;
+      t1.getWorldPosition(_a); t2.getWorldPosition(_b); const c=_b.clone().sub(_a).normalize(); aim(t1,t2,c.lerp(h,tw).normalize()); } }
 }
+const _rp={};
+function restPitch(d,side){   // how far the rest foot points down from heel to ball (radians)
+  const k=d.i+side; if(_rp[k]===undefined){ const v=d.rest['toe3-1.'+side].clone().sub(d.rest['foot.'+side]); _rp[k]=Math.atan2(-v.y,Math.hypot(v.x,v.z)); } return _rp[k];
+}
+function releveRise(d,side,rl){ const a0=restPitch(d,side), Lb=d.rest['toe3-1.'+side].distanceTo(d.rest['foot.'+side])*d.sc; return Lb*(Math.sin(lerp(a0,1.05,rl))-Math.sin(a0)); }
 
 // ---------- timeline (choreography.json "timeline"): per actor, where they are, travel and face, section by section.
 // Entries {at, to:[x,z] (travel there over "bars", default 2; the first entry places the actor), face: degrees (0 = audience)
@@ -100,6 +115,7 @@ const pulseTime=n=>F.beat_offset+P.offsetMs/1000+(n+P.shift+F.bar_phase)*F.beat_
 // gesture (from the phrase) is free in the air and lands where the body is when it comes down.
 const MDT=1/60, TURN_MAX=150*D, TURN_ACC=320*D, STEP_ERR=0.09, LIFT=0.05;
 const OFFSTAGE=1.3;
+const HAND_C=0.07, PALM=0.017;   // holding hands: grip centre from the wrist joint, half a hand's thickness
 const KNEE_R=0.055, ANKLE_R=0.065, HIP_MIN=0.12, ELBOW_R=0.045, WRIST_R=0.035;   // floor work: joint heights when resting on the floor
 let MOT=null, MOT_KEY='';
 const _rotXZ=(x,z,a)=>[x*Math.cos(a)+z*Math.sin(a), -x*Math.sin(a)+z*Math.cos(a)];
@@ -110,14 +126,16 @@ const _rotXZ=(x,z,a)=>[x*Math.cos(a)+z*Math.sin(a), -x*Math.sin(a)+z*Math.cos(a)
 // point, so the hands stay joined whatever the bodies do; personal space keeps the pair within reach.
 const HOLDS=(CHOREO.holds||[]).map(h=>{ const ia=SPOT_I[h.pair[0]], ib=SPOT_I[h.pair[1]]; if(ia===undefined||ib===undefined||!TLD[ia]||!TLD[ib]) return null;
   const bar=CPB*F.beat_period, T0=atTime(h.at), T1=T0+(h.bars===undefined?1:h.bars)*bar, bl=Math.min((h.blend===undefined?0.25:h.blend)*bar,(T1-T0)/3);
-  const height=h.height||'low', maxD=height==='high'?0.74:h.hands==='both'?0.85:0.9, minD=height==='high'?0.6:0.48;   // a turn under the hands needs room for her shoulders to sweep round
+  const height=h.height||'low', maxD=height==='high'?0.64:h.hands==='both'?0.72:0.66, minD=height==='high'?0.55:h.hands==='both'?0.6:0.52;   // a turn under the hands needs room for her shoulders to sweep round
   let hands;
   if(Array.isArray(h.hands)) hands=[h.hands.map(x=>x[0].toUpperCase())];
   else if(h.hands==='both') hands=[['R','L'],['L','R']];
   else hands=null;   // "near": chosen from how the pair stands over the whole hold (holdHands)
   return {ia,ib,T0,T1,bl,height,maxD,minD,hands,turn:(h.turn||0)*D};
 }).filter(Boolean);
-const holdW=(h,t)=>t<=h.T0||t>=h.T1?0:Math.min(ease(clamp((t-h.T0)/h.bl)),ease(clamp((h.T1-t)/h.bl)));
+HOLDS.forEach(h=>HOLDS.forEach(g=>{ if(g!==h && g.ia===h.ia && g.ib===h.ib && Math.abs(g.T0-h.T1)<0.05){ h.next=g; g.prev=h; } }));   // one hold straight into the next: the grip carries over
+const holdW=(h,t)=>{ const a=h.prev?h.T0-h.bl/2:h.T0, b=h.next?h.T1+h.bl/2:h.T1; if(t<=a||t>=b) return 0;
+  return Math.min(ease(clamp((t-a)/h.bl)),ease(clamp((b-t)/h.bl))); };   // joined holds cross-fade over the change
 function holdSpin(i,t){ let s=0; HOLDS.forEach(h=>{ if(h.ib===i&&h.turn&&t>h.T0) s+=h.turn*ease(clamp((t-h.T0-h.bl)/Math.max(1e-3,h.T1-h.T0-2*h.bl))); }); return s; }
 function holdHands(h){   // "near": the hands on the sides facing each other, by majority over the hold (bone L = own left = body +x)
   if(h.hands) return h.hands;
@@ -125,17 +143,35 @@ function holdHands(h){   // "near": the hands on the sides facing each other, by
   for(let t=h.T0+h.bl; t<=h.T1-h.bl+1e-6; t+=0.2){ const a=motionAt(h.ia,t), b=motionAt(h.ib,t), k=near(a,b)+near(b,a); votes[k]=(votes[k]||0)+1; }
   const k=Object.keys(votes).sort((x,y)=>votes[y]-votes[x])[0]||'RL'; return h.hands=[[k[0],k[1]]];
 }
-function holdTargets(t){   // {dancer index + bone side: {T: where the wrist goes, w: weight, j: partner}} for every hand held at t (bodies already posed)
-  const out={};
+function holdTargets(t){   // {dancer index + bone side: {T: where the wrist goes, w: weight, j: partner, f: fingers, n: palm}} for every hand held at t (bodies already posed)
+  const out={}, put=(k,e)=>{ const o=out[k]; e.parts=[{w:e.w,mate:e.mate,bodies:e.bodies}]; if(!o){ out[k]=e; return; } const u=e.w/(o.w+e.w);   // a hand in two joined holds moves from one grip to the next
+    out[k]={T:o.T.lerp(e.T,u),w:Math.min(1,o.w+e.w),j:e.j,f:o.f.clone().lerp(e.f,u).normalize(),n:o.n.clone().lerp(e.n,u).normalize(),parts:[...o.parts,...e.parts],moved:true}; };
   HOLDS.forEach(h=>{ const w=holdW(h,t); if(w<=0) return;
     holdHands(h).forEach(([sa,sb])=>{ const A=dancers[h.ia].bones['upperarm01.'+sa].getWorldPosition(new THREE.Vector3()), B=dancers[h.ib].bones['upperarm01.'+sb].getWorldPosition(new THREE.Vector3());   // the posed shoulders
       const arm=(i,sd)=>{ const r=dancers[i].rest; return (r['lowerarm01.'+sd].distanceTo(r['upperarm01.'+sd])+r['wrist.'+sd].distanceTo(r['lowerarm01.'+sd]))*dancers[i].sc*0.95; };
-      const H=A.clone().lerp(B,h.height==='high'?0.65:0.5), ok=(S,L)=>{ const hz=Math.hypot(S.x-H.x,S.z-H.z); return Math.sqrt(Math.max(0,L*L-hz*hz)); };   // how far up or down each arm can still reach
+      let H=A.clone().lerp(B,0.5);
+      if(h.height==='high'){ const N=dancers[h.ib].bones.neck02.getWorldPosition(new THREE.Vector3()); H=N.clone().lerp(A,0.3); }   // a turn under the hands: hers stay over her head while she turns beneath them
+      const ok=(S,L)=>{ const hz=Math.hypot(S.x-H.x,S.z-H.z); return Math.sqrt(Math.max(0,L*L-hz*hz)); };   // how far up or down each arm can still reach
       const v=Math.min(ok(A,arm(h.ia,sa)),ok(B,arm(h.ib,sb)));
-      H.y=h.height==='high'?Math.max(A.y,B.y)+Math.min(0.42,Math.max(0,v-Math.abs(A.y-B.y))):(A.y+B.y)/2-Math.min(h.height==='chest'?0.12:0.38,v);
+      H.y=h.height==='high'?Math.max(A.y,B.y)+Math.min(0.42,Math.max(0,v-Math.abs(A.y-B.y))):(A.y+B.y)/2-Math.min(h.height==='chest'?0.02:0.5,v);   // chest: palms together in front of the chest; low: arms hanging
       const bodies=[...postedCaps(dancers[h.ia]),...postedCaps(dancers[h.ib])]; for(let it=0;it<3;it++) pushOut(H,bodies,0.06);   // the joined hands stay clear of both bodies
-      const ta=H.clone().addScaledVector(A.clone().sub(H).normalize(),0.03), tb=H.clone().addScaledVector(B.clone().sub(H).normalize(),0.03);   // the two hands side by side in the grip
-      out[h.ia+sa]={T:ta,w,j:h.ib}; out[h.ib+sb]={T:tb,w,j:h.ia}; }); });
+      // the grip: palm against palm, fingers down (low) or up (chest, high). Facing each other the palms face along the
+      // line between them; side by side they face front and back (an arm hanging at the side turns its palm back, never out)
+      // the same hand each (right to right, passing face to face) low down is a handshake: fingers toward the partner,
+      // palms to the side
+      const u=dancers[h.ib].bones.neck02.getWorldPosition(new THREE.Vector3()).sub(dancers[h.ia].bones.neck02.getWorldPosition(new THREE.Vector3())).setY(0).normalize(), ya=motionAt(h.ia,t).yaw, fa=new THREE.Vector3(Math.sin(ya),0,Math.cos(ya));
+      let fA, fB, n;
+      if(h.height==='low' && sa===sb){ fA=u.clone(); fB=u.clone().negate(); n=new THREE.Vector3(Math.cos(ya),0,-Math.sin(ya)).multiplyScalar(sa==='R'?1:-1); n.addScaledVector(u,-n.dot(u)).normalize(); }
+      else { fA=new THREE.Vector3(0,h.height==='low'?-1:1,0); fB=fA.clone();
+        const pp=new THREE.Vector3(-u.z,0,u.x); if(pp.dot(fa)>0) pp.negate();
+        const fc=ease(clamp((Math.abs(fa.dot(u))-0.3)/0.5)); n=pp.multiplyScalar(1-fc).addScaledVector(u,fc).normalize(); }   // a's palm faces n, b's faces -n
+      put(h.ia+sa,{T:H.clone().addScaledVector(fA,-HAND_C).addScaledVector(n,-PALM),w,j:h.ib,f:fA,n:n.clone(),bodies,mate:h.ib+sb});
+      put(h.ib+sb,{T:H.clone().addScaledVector(fB,-HAND_C).addScaledVector(n,PALM),w,j:h.ia,f:fB,n:n.clone().negate(),bodies,mate:h.ia+sa}); }); });
+  const D={};   // ...and on the way the joined hands stay clear of both bodies: each pushed as its grips are, weighted as it holds them
+  Object.keys(out).forEach(k=>{ const a=out[k]; if(!a.moved && !(out[a.mate]&&out[a.mate].moved)) return; let ws=0; const d=new THREE.Vector3();
+    a.parts.forEach(p=>{ const b=out[p.mate]; if(!b) return; const M=a.T.clone().lerp(b.T,0.5), M2=M.clone(); for(let it=0;it<3;it++) pushOut(M2,p.bodies,0.06); d.addScaledVector(M2.sub(M),p.w); ws+=p.w; });
+    if(ws>0) D[k]=d.multiplyScalar(1/ws); });
+  Object.keys(D).forEach(k=>out[k].T.add(D[k]));
   return out;
 }
 // personal space: bodies never pass through each other. Where two dancers would come closer than their bodies and
@@ -190,7 +226,7 @@ function motionTrack(i){
         wd=clamp(dl/Math.max(0.25,L[e].turnDur/3),-TURN_MAX,TURN_MAX); }
       w+=clamp(wd-w,-TURN_ACC*MDT,TURN_ACC*MDT); y+=w*MDT; }
     M.yaw[k]=y+phraseSpin(i,t)+holdSpin(i,t);   // a turn under the hands is a walking turn: the feet step round
-    if(k>0) mvRaw[k]=(Math.hypot(p[0]-M.px[k-1],p[1]-M.pz[k-1])/MDT>0.04 || Math.abs(w)>0.3)?1:0; }
+    if(k>0) mvRaw[k]=(Math.hypot(p[0]-M.px[k-1],p[1]-M.pz[k-1])/MDT>0.04 || Math.abs(w)>0.3 || Math.abs(holdSpin(i,t+0.05)-holdSpin(i,t-0.05))>0.03)?1:0; }   // a turn under the hands walks
   const R=Math.round(0.8/MDT); let acc=0;      // walking weight: travel or turning, smoothed over +-0.8 s
   for(let k=-R;k<n;k++){ if(k+R<n) acc+=mvRaw[k+R]; if(k-R-1>=0) acc-=mvRaw[k-R-1]; if(k>=0) M.mv[k]=acc/(2*R+1); }
   // feet
@@ -298,7 +334,10 @@ function poseAt(i,t){                   // the actor's pose at t (blended across
   const cur=phraseEval(L[k],t).pose; if(k===0) return cur;
   const u=clamp((t-L[k].T)/Math.max(1e-3,L[k].blend)); return u>=1?cur:mixPose(phraseEval(L[k-1],t).pose,cur,ease(u));
 }
-function phraseSpin(i,t){               // total turning from phrases, continuous across phrase changes
+function phraseSpin(i,t){               // phrase turning, except while holding hands (a turn under the hands is the hold's own)
+  let s=phraseSpin0(i,t); HOLDS.forEach(h=>{ if((h.ia===i||h.ib===i) && t>h.T0) s-=phraseSpin0(i,Math.min(t,h.T1))-phraseSpin0(i,h.T0); }); return s;
+}
+function phraseSpin0(i,t){               // total turning from phrases, continuous across phrase changes
   const L=PH[i], k=phraseIndex(i,t); if(k<0) return 0;
   let s=0; for(let j=0;j<k;j++) s+=phraseEval(L[j],L[j+1].T).spin-phraseEval(L[j],L[j].T).spin;
   return s+phraseEval(L[k],t).spin-phraseEval(L[k],L[k].T).spin;
@@ -376,15 +415,45 @@ function bodyCaps(d,t){
   const head=top.clone().add(top.clone().sub(hip).normalize().multiplyScalar(0.16));
   return [{a:new THREE.Vector3(hip.x,0.35,hip.z),b:hip,r:0.15},{a:hip,b:top,r:0.15},{a:head,b:head,r:0.12}];
 }
+const _hinge={};
+function elbowHinge(d,side){   // the elbow's hinge axis in the upper arm's own frame (the rest pose has the elbow slightly bent)
+  const k=d.i+side; if(!_hinge[k]){ const r=d.rest; _hinge[k]=r['lowerarm01.'+side].clone().sub(r['upperarm01.'+side]).cross(r['wrist.'+side].clone().sub(r['lowerarm01.'+side])).normalize(); }
+  return _hinge[k].clone();
+}
+function slerpDir(a,b,w){   // turn unit vector a (in place) toward b by fraction w of the angle between them
+  const ang=a.angleTo(b); if(ang<1e-4||w<=0) return a; if(w>=1) return a.copy(b);
+  let ax=a.clone().cross(b); if(ax.lengthSq()<1e-10){ ax=new THREE.Vector3(0,1,0).cross(a); if(ax.lengthSq()<1e-10) ax.set(1,0,0); }
+  return a.applyAxisAngle(ax.normalize(),ang*w);
+}
+function palmFrame(d,side){   // the hand's finger direction and palm normal (bone L = own left; the thumb is on the palm side)
+  const P=n=>d.bones[n+'.'+side].getWorldPosition(new THREE.Vector3()), W=P('wrist'), f=P('finger3-1').sub(W).normalize();
+  const n=f.clone().cross(P('finger2-1').sub(P('finger5-1')).normalize()).multiplyScalar(side==='L'?1:-1); n.addScaledVector(f,-n.dot(f)).normalize();
+  return {f,n};
+}
+function gripHand(d,side,foD,ht){   // a held hand: the forearm turns the palm toward the partner's palm, the wrist bends the fingers up or down
+  const w=ht.w, b=d.bones;
+  let pf=palmFrame(d,side); const pn=pf.n.clone().addScaledVector(foD,-pf.n.dot(foD)), tn=ht.n.clone().addScaledVector(foD,-ht.n.dot(foD));
+  if(pn.lengthSq()>1e-6 && tn.lengthSq()>1e-6){ pn.normalize(); tn.normalize();
+    const phi=clamp(Math.atan2(pn.clone().cross(tn).dot(foD),pn.dot(tn)),-1.6,1.6);   // the forearm turns at most about 90 degrees either way
+    rotWorld(b['lowerarm02.'+side],new THREE.Quaternion().setFromAxisAngle(foD,phi*w)); pf=palmFrame(d,side); }
+  let fd=ht.f.clone(); const ang=fd.angleTo(foD), MAXB=70*D; if(ang>MAXB) fd=foD.clone().lerp(fd,MAXB/ang).normalize();   // the wrist bends at most 70 degrees
+  const nd=ht.n.clone().addScaledVector(fd,-ht.n.dot(fd)); if(nd.lengthSq()<1e-6) return; nd.normalize();
+  const basis=(f,n)=>new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(f,n,f.clone().cross(n)));
+  const q=basis(fd,nd).multiply(basis(pf.f,pf.n).invert());
+  const ang2=2*Math.acos(Math.min(1,Math.abs(q.w))), MAXW=80*D;   // a wrist turns only so far: past that the palms meet at an angle
+  rotWorld(b['wrist.'+side],new THREE.Quaternion().slerp(q,w*Math.min(1,MAXW/Math.max(ang2,1e-6))));
+}
 function postedCaps(d){   // a dancer's body as posed this frame: legs, torso, head
   const b=d.bones, P=n=>b[n].getWorldPosition(new THREE.Vector3()), hip=P('spine05'), knees=P('lowerleg01.L').add(P('lowerleg01.R')).multiplyScalar(0.5), head=P('head'); head.y+=0.09;
   return [{a:knees,b:hip,r:0.14},{a:hip,b:P('neck02'),r:0.15},{a:head,b:head,r:0.12}];
 }
 const _ab=new THREE.Vector3(), _pc=new THREE.Vector3();
-function pushOut(p,caps,pad){   // move point p (in place) out of the capsules, plus pad (the limb's own thickness)
+function pushOut(p,caps,pad,ref){   // move point p (in place) out of the capsules, plus pad (the limb's own thickness); with ref (the
+  // limb's root, outside the body) a point deep inside goes back out on the root's side, never through to the far side
   caps.forEach(c=>{ _ab.subVectors(c.b,c.a); const L=_ab.lengthSq(), u=L>1e-8?clamp(_pc.subVectors(p,c.a).dot(_ab)/L):0;
     const C=c.a.clone().addScaledVector(_ab,u); _pc.subVectors(p,C); const l=_pc.length(), r=c.r+pad;
-    if(l<r){ if(l<1e-4) _pc.set(0,1,0); p.copy(C).addScaledVector(_pc.normalize(),r); } });
+    if(l<r){ if(ref){ const q=ref.clone().sub(C); if(L>1e-8) q.addScaledVector(_ab,-q.dot(_ab)/L); if(q.lengthSq()>1e-8) _pc.multiplyScalar(1/Math.max(r,1e-4)).addScaledVector(q.normalize(),1-l/r); }
+      if(_pc.lengthSq()<1e-8) _pc.set(0,1,0); p.copy(C).addScaledVector(_pc.normalize(),r); } });
   return p;
 }
 const feet_y=(d,side)=>d.rest['foot.'+side].y*d.sc;
@@ -438,13 +507,13 @@ function animate(t){
       [['L','R'],['R','L']].forEach(([g,sup])=>{ const w=ease(clamp(gest(g)[1]/45))*0.55;
         if(w>0){ shx+=(feet[sup][0]-rx-shx)*w; shz+=(feet[sup][2]-rz-shz)*w; } }); }
     const bob=feet?0.018*wk*(1-Math.max(Math.sin(Math.PI*feet.phL),Math.sin(Math.PI*feet.phR))):0;   // walking: the pelvis rides highest over the standing leg
-    root.position.set(d.rest.root.x+(cx+shx)/d.sc, d.rest.root.y-(dip*0.045+pl*0.11-rl*0.06+bob)/d.sc, d.rest.root.z+(cz+shz)/d.sc);
+    root.position.set(d.rest.root.x+(cx+shx)/d.sc, d.rest.root.y-(dip*0.045+pl*0.11-(rl>0?releveRise(d,"L",rl):0)+bob)/d.sc, d.rest.root.z+(cz+shz)/d.sc);
     root.quaternion.copy(yawQ);
     d.group.updateMatrixWorld(true);
     if(feet){ let drop=0;
       ['L','R'].forEach(side=>{ const gw=clamp(gest(side)[1]/20); if(gw>=1) return; const r=d.rest;
         const Lm=(r['lowerleg01.'+side].distanceTo(r['upperleg01.'+side])+r['foot.'+side].distanceTo(r['lowerleg01.'+side]))*d.sc*0.985;
-        const hip=d.bones['upperleg01.'+side].getWorldPosition(new THREE.Vector3()), T=feet[side], ty=T[1]+(rl>0?rl*0.06:0);
+        const hip=d.bones['upperleg01.'+side].getWorldPosition(new THREE.Vector3()), T=feet[side], ty=T[1]+(rl>0?releveRise(d,side,rl):0);
         const h=Math.hypot(hip.x-T[0],hip.z-T[2]), v=hip.y-ty, v2=Math.sqrt(Math.max(0,Lm*Lm-h*h));
         drop=Math.max(drop,(v-v2)*(1-gw)); });
       if(drop>0){ root.position.y-=Math.min(drop,0.3)/d.sc; d.group.updateMatrixWorld(true); } }
@@ -493,7 +562,7 @@ function animate(t){
       }
       if(feet && gw<0.5 && !KP[side]){ const u=feet['ph'+side];   // a walking step: heel peels off first (toes down), the heel meets the floor first (toes up)
         if(u>0&&u<1){ const r=0.6*Math.sin(Math.PI*u)*(1-1.6*u); o.roll=r; T.y+=Math.max(0,0.14*d.sc/1.8*Math.sin(r)); } }
-      if(rl>0 && gw<1 && !KP[side]){ T.y+=rl*0.06*(1-gw); o.releve=rl*(1-gw); }
+      if(rl>0 && gw<1 && !KP[side]){ o.releve=rl*(1-gw); }   // legIK raises the heel
       if(KP[side]){ const {K,w}=KP[side], r=d.rest, L2=r['foot.'+side].distanceTo(r['lowerleg01.'+side])*d.sc;   // kneeling: shin back along the floor
         const hip=d.bones['upperleg01.'+side].getWorldPosition(new THREE.Vector3()), FK=K.clone().addScaledVector(fwd,-L2); FK.y=ANKLE_R;
         T.lerp(FK,w); T.y+=Math.sin(Math.PI*w)*0.14;      // the foot travels through the air as the knee goes down or comes up
@@ -505,6 +574,8 @@ function animate(t){
     // arms
     const qa=PZ?{L:lerpArm(armOf(PZ.L),FINAL.L,oW), R:lerpArm(armOf(PZ.R),FINAL.R,oW)}
               :{L:lerpArm(lerpArm(prev.L,cur.L,k),FINAL.L,oW), R:lerpArm(lerpArm(prev.R,cur.R,k),FINAL.R,oW)};
+    HOLDS.forEach(h=>{ if(h.ib!==d.i || !h.turn) return; const w=holdW(h,t); if(w<=0) return;   // turning under the hands: the free arm comes in to the waist, clear of the partner
+      const held=holdHands(h).map(x=>x[1]); ['L','R'].forEach(sd=>{ if(held.includes(sd)) return; const key=sd==='L'?'R':'L'; qa[key]=lerpArm(qa[key],TUCK,w); }); });
     ['L','R'].forEach(side=>{
       const s=side==='L'?1:-1, b=d.bones;
       // our "L" in the position table is the dancer's right as seen from the audience
@@ -518,19 +589,35 @@ function animate(t){
       const ht=HT[d.i+side];
       if(ht){ const dv=ht.T.clone().sub(S), dist=Math.min(dv.length(),(Lu+Lf)*0.999), dir=dv.normalize();   // holding a hand: two-bone reach to the grip, elbow down and out
         const a=(Lu*Lu-Lf*Lf+dist*dist)/(2*dist), hh=Math.sqrt(Math.max(0,Lu*Lu-a*a));
-        const pole=new THREE.Vector3(0,-1,0).addScaledVector(xr,s*0.7).addScaledVector(fwd,-0.2); pole.addScaledVector(dir,-pole.dot(dir)).normalize();
-        let E=S.clone().addScaledVector(dir,a).addScaledVector(pole,hh);
-        if(near.length){ for(let it=0;it<3;it++){ const M=E.clone().lerp(ht.T,0.5), M2=pushOut(M.clone(),near,0.045);   // the elbow bends round the partner's body, the hand stays in the grip
-            const E2=pushOut(E.clone(),near,0.05).add(M2.sub(M)); E=S.clone().addScaledVector(E2.sub(S).normalize(),Lu); } }
-        upD.lerp(E.clone().sub(S).normalize(),ht.w).normalize(); foD.lerp(ht.T.clone().sub(E).normalize(),ht.w).normalize();
+        const pole=new THREE.Vector3(0,-1,0).addScaledVector(xr,s*0.7).addScaledVector(fwd,-0.2); pole.addScaledVector(dir,-pole.dot(dir));
+        const out=xr.clone().multiplyScalar(s); out.addScaledVector(dir,-out.dot(dir)); pole.addScaledVector(out,3*Math.max(0,0.6-pole.length())).normalize();   // reaching up over the head the elbow points out to the side
+        // the elbow goes round the circle of places that keep the hand in the grip: as near the natural one (down and out)
+        // as it can while staying out of the other bodies - a weighted average over the circle, so it never jumps
+        const C=S.clone().addScaledVector(dir,a), p1=dir.clone().cross(pole), V=new THREE.Vector3();
+        for(let k=0;k<16;k++){ const th=k*Math.PI/8, e=pole.clone().multiplyScalar(Math.cos(th)).addScaledVector(p1,Math.sin(th));
+          let pen=0; if(near.length){ const Ek=C.clone().addScaledVector(e,hh), Mk=Ek.clone().lerp(ht.T,0.5);
+            pen=pushOut(Ek.clone(),near,0.05).distanceTo(Ek)+pushOut(Mk.clone(),near,0.045).distanceTo(Mk); }
+          V.addScaledVector(e,Math.exp(-(0.5*(1-Math.cos(th))+12*pen)/0.15)); }
+        const E=V.lengthSq()>1e-12?C.addScaledVector(V.normalize(),hh):C.addScaledVector(pole,hh);
+        slerpDir(upD,E.clone().sub(S).normalize(),ht.w); slerpDir(foD,ht.T.clone().sub(E).normalize(),ht.w);   // at an even angular pace, never whipping through the middle
         El=S.clone().addScaledVector(upD,Lu); }
-      if(near.length && !(ht&&ht.w>0.95)){   // an arm meeting another body rests on it instead of passing through (also while taking hold or letting go)
-        for(let it=0;it<3;it++){ const E2=pushOut(El.clone(),near,0.05); upD.copy(E2.sub(S)).normalize(); El=S.clone().addScaledVector(upD,Lu); }
+      const av=ht?clamp((1-ht.w)/0.2):1;   // a fully held arm has already bent round the bodies
+      if(near.length && av>0){   // an arm meeting another body rests on it instead of passing through (also while taking hold or letting go)
+        const u0=upD.clone(), f0=foD.clone();
+        for(let it=0;it<3;it++){ const E2=pushOut(El.clone(),near,0.05,S); upD.copy(E2.sub(S)).normalize(); El=S.clone().addScaledVector(upD,Lu); }
         for(let it=0;it<3;it++){ const M=El.clone().addScaledVector(foD,Lf*0.5), W=El.clone().addScaledVector(foD,Lf);
-          pushOut(M,near,0.045); pushOut(W,near,0.06); foD.copy(W.sub(El).normalize().add(M.sub(El).normalize())).normalize(); } }
-      aim(b['upperarm01.'+side],b['lowerarm01.'+side],upD);
+          pushOut(M,near,0.045,El); pushOut(W,near,0.06,El); foD.copy(W.sub(El).normalize().add(M.sub(El).normalize())).normalize(); }
+        if(av<1){ const ua=upD.clone(), fa=foD.clone(); slerpDir(upD.copy(u0),ua,av); slerpDir(foD.copy(f0),fa,av); } }
+      aim(b['upperarm01.'+side],b['lowerarm01.'+side],upD,0,fwd);
+      if(ht){ const hb=clamp((upD.angleTo(foD)-10*D)/(25*D))*ht.w; if(hb>0){   // a held arm: the elbow is a hinge, so the upper arm's whole orientation follows from
+          // the arm's direction and the plane it bends in - the same shape always gives the same arm, however the body turned to get there
+          const r=d.rest, u0=r['lowerarm01.'+side].clone().sub(r['upperarm01.'+side]).normalize(), h0=elbowHinge(d,side), hd=upD.clone().cross(foD).normalize();
+          const fr=(x,h)=>{ const y=h.clone().addScaledVector(x,-h.dot(x)).normalize(); return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,x.clone().cross(y))); };
+          const Qt=fr(upD,hd).multiply(fr(u0,h0).invert()), Qc=b['upperarm01.'+side].getWorldQuaternion(new THREE.Quaternion());
+          rotWorld(b['upperarm01.'+side],new THREE.Quaternion().slerp(Qt.multiply(Qc.invert()),hb)); } }
       aim(b['lowerarm01.'+side],b['wrist.'+side],foD);
       rotWorld(b['lowerarm02.'+side],new THREE.Quaternion().setFromAxisAngle(foD,-s*qq.palm*D));
+      if(ht) gripHand(d,side,foD,ht);
     });
     // head
     const h0=PZ?PZ.head:lerp2(prev.head,cur.head,k);

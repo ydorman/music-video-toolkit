@@ -69,10 +69,21 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   turn, blend}`. `hands`: `"near"` (default: the hands on the sides facing each other over the hold), `"both"` (facing,
   two hands) or `[a's hand, b's hand]` (`"left"`/`"right"`, the dancer's own). `height`: `"low"`, `"chest"` or `"high"`
   (raised over b's head); `turn`: degrees b turns under the raised hands (a walking turn, the feet step round);
-  `blend`: bars to take hold and let go (0.25). Each frame poses every body first, then both arms reach for one
-  shared grip between the real shoulders (lowered or raised only as far as both arms reach), so held hands stay
-  joined; personal space keeps a holding pair within reach (0.9 m, 0.85 with both hands, 0.74 for a turn under) and
-  apart enough for the shoulders (0.48 m; 0.6 for a turn under, so hers sweep round clear of him).
+  `blend`: bars to take hold and let go (0.25); a hold that starts as the pair's previous one ends carries the grip
+  straight over (no letting go between them). Each frame poses every body first, then both arms reach for one shared
+  grip between the real shoulders (lowered or raised only as far as both arms reach; for a turn under, over her
+  head, so she turns beneath it), so held hands stay joined. The grip is palm to palm, a hand's thickness apart:
+  fingers down walking hand in hand (palms front and back, as a hanging arm turns them), fingers up at the chest or
+  raised, and a handshake (fingers toward the partner) when passing face to face with the same hand; the forearm
+  turns the palm and the wrist bends (at most 70 degrees) to get there. A held elbow takes the place nearest its
+  natural one (down and out; out to the side overhead) that keeps it out of other bodies, and the upper arm's twist
+  follows the elbow's hinge, so turning under the hands never flips the arm. While turning under, her free arm
+  comes in to the waist and her leg gestures and phrase spins give way to walking steps. Personal space keeps a
+  holding pair within reach (0.66 m hand in hand, 0.72 with both hands, 0.64 for a turn under) and apart enough for
+  the shoulders (0.52 m, 0.6, 0.55).
+- Releve: the heel rises just as far as keeps the ball of the foot on the floor, and the toes bend flat on it (also
+  as the heel peels off in a walking step); a pointed foot in the air keeps its toes in line. An arm pushed out of
+  another body goes back out on the side it came from, never through to the far side.
 - Skirts: the hem hangs from the hips like a damped pendulum (about 1.1 Hz, no overshoot): it trails the hips and
   falls back to hang straight when they stop; it flares only while the body turns (with the square of the turning
   speed) and drops within about a second after; a knee reaching forward or out pushes it just enough to stay covered.
@@ -84,9 +95,10 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   dancers at 30 fps (no rendering) and lists what a real dancer couldn't do: airborne (no foot on the floor), skate
   (a planted foot sliding), overreach (a leg too short for its target), spin/snap (turning too fast or reversing in a
   frame), limb (a bone swinging too fast), speed (travel or acceleration), crowd (bodies too close) and, for floor
-  work, sink (body pushed into the floor), through (an arm or head inside another dancer's torso or head), grip (held hands more than 13 cm apart) and dart
+  work, sink (body pushed into the floor), through (an arm or head inside another dancer's torso or head), self (a forearm inside the dancer's own torso),
+  grip (held palms more than 8 cm apart or not facing each other) and dart
   (a stepping foot flicking faster than a walk swings it); "airborne" counts knees, hips, chest and hands as support. Partners at
-  about 0.5 m, leg kicks around 600-1100 deg/s and brief 6-10 m/s2 weight shifts into a gesture are normal.
+  about 0.5 m (0.45 holding hands), leg kicks around 600-1100 deg/s and brief 6-10 m/s2 weight shifts into a gesture are normal.
 - Actors without a timeline keep the looping step pattern and the turn from the preview.
 
 ### Movement vocabulary: poses and phrases

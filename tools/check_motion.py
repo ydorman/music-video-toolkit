@@ -11,7 +11,8 @@ and reports what no real dancer could do. Usage: check_motion.py <build dir> [--
   limb       a bone swings faster than a limb can move
   speed      the body travels faster than a lyrical walk / accelerates impossibly
   crowd      two dancers closer than their bodies allow
-  grip       hands that are held drift apart
+  grip       held hands drift apart (palms more than 8 cm apart) or stop facing each other
+  self       a forearm passing through the dancer's own torso
   through    an arm or head passing into another dancer's torso or head
 """
 import asyncio, json, math, os, sys, argparse
@@ -47,10 +48,12 @@ SAMPLE="""(([t0,t1,fps])=>{
       o.pts=['lowerarm01.L','lowerarm01.R','wrist.L','wrist.R','head'].map(pos);
       ['L','R'].forEach(sd=>{ const a=pos('lowerarm01.'+sd), b=pos('wrist.'+sd); o.pts.push(a.map((x,j)=>(x+b[j])/2)); });
       o.pts.push(o.headc);
-      o.spot=CFG[d.i].spot; fr.d.push(o); });
-    fr.holds=(typeof HOLDS==='undefined'?[]:HOLDS).filter(h=>holdW(h,t)>0.9).flatMap(h=>holdHands(h).map(([sa,sb])=>{   // held hands: how far apart the wrists are
-      const a=dancers[h.ia].bones['wrist.'+sa].getWorldPosition(new THREE.Vector3()), b=dancers[h.ib].bones['wrist.'+sb].getWorldPosition(new THREE.Vector3());
-      return [h.ia,CFG[h.ib].spot,a.distanceTo(b)]; }));
+      o.own=['L','R'].flatMap(sd=>{ const a=pos('lowerarm01.'+sd), b=pos('wrist.'+sd); return [b,a.map((x,j)=>(x+b[j])/2)]; });   // own forearm, against own torso
+      o.spot=CFG[d.i].spot; o.vis=d.group.visible; fr.d.push(o); });
+    fr.holds=(typeof HOLDS==='undefined'?[]:HOLDS).filter(h=>holdW(h,t)>0.97).flatMap(h=>holdHands(h).map(([sa,sb])=>{   // held hands: how far apart the palms are, and whether they face each other
+      const c=(i,sd)=>{ const pf=palmFrame(dancers[i],sd); return [dancers[i].bones['wrist.'+sd].getWorldPosition(new THREE.Vector3()).addScaledVector(pf.f,HAND_C),pf.n]; };
+      const [a,na]=c(h.ia,sa), [b,nb]=c(h.ib,sb);
+      return [h.ia,CFG[h.ib].spot,a.distanceTo(b),-na.dot(nb)]; }));
     out.push(fr); }
   const S=SECTIONS.map(x=>[x.name, atTime(x.name)]);
   return {frames:out, sections:S};
@@ -90,8 +93,11 @@ def check(res):
         def add(kind,t,val,msg): issues.append({'kind':kind,'spot':spot,'t':round(t,2),'section':sec(t),'value':round(val,3),'msg':msg})
         for k in range(1,len(F)-1):
             a,b,c=F[k-1]['d'][i],F[k]['d'][i],F[k+1]['d'][i]; t=F[k]['t']
-            for hi,other,gap in F[k].get('holds',[]):
-                if hi==i and gap>0.13: add('grip',t,gap,f'hand held with {other} {gap*100:.0f} cm from it (arm too short or pulled away)')
+            if not b.get('vis',True): continue   # off stage, hidden in the forest
+            for hi,other,gap,face in F[k].get('holds',[]):
+                if hi==i and (gap>0.08 or face<0.5): add('grip',t,gap,f'palm held with {other} {gap*100:.0f} cm from theirs, facing {face:.2f} (1 = palm to palm)')
+            deep=max(0.08-segdist(p,*b['cap']) for p in b['own'])   # the torso's core: a hand on the chest rests outside it
+            if deep>0.0: add('self',t,deep,f'forearm {deep*100:.0f} cm into own torso')
             low=min(min(b['lift']),min(b['body']))
             if low>0.025: add('airborne',t,low,f'nothing on the ground (lowest point {low*100:.0f} cm up)')
             sink=min(b['body'])
@@ -117,11 +123,12 @@ def check(res):
                 if om>540: add('limb',t,om,f'bone {j} swings {om:.0f} deg/s')
             for j in range(i+1,N):
                 o=F[k]['d'][j]; dd=math.hypot(b['root'][0]-o['root'][0],b['root'][2]-o['root'][2])
-                if dd<0.5: add('crowd',t,dd,f'{dd:.2f} m from {o["spot"]}')
+                held=any(hi in (i,j) and other in (b['spot'],o['spot']) for hi,other,*_ in F[k].get('holds',[]))
+                if dd<(0.45 if held else 0.5): add('crowd',t,dd,f'{dd:.2f} m from {o["spot"]}')   # holding hands stands a little closer
             for j in range(N):
                 if j==i: continue
                 o=F[k]['d'][j]
-                if math.hypot(b['root'][0]-o['root'][0],b['root'][2]-o['root'][2])>1.6: continue
+                if not o.get('vis',True) or math.hypot(b['root'][0]-o['root'][0],b['root'][2]-o['root'][2])>1.6: continue
                 deep=max(0.12+0.035-segdist(p,*o['cap']) for p in b['pts'])     # torso ~12 cm round, limb ~3.5 cm
                 deep=max(deep,max(0.09+0.035-dist(p,o['headc']) for p in b['pts'][:6]))
                 if deep>0.03: add('through',t,deep,f'reaches {deep*100:.0f} cm into {o["spot"]}')
