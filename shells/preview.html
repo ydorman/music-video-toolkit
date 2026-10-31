@@ -20,11 +20,24 @@
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.45}
-main{max-width:1120px;margin:0 auto;padding:20px 16px 48px}
+main{max-width:1720px;margin:0 auto;padding:16px 16px 32px}
+/* studio layout: the clip on the left, the settings in a tabbed panel on the right that stays in view */
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.view{min-width:0}
+.panel{position:sticky;top:12px;max-height:calc(100vh - 24px);display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;background:var(--panel);overflow:hidden}
+.tabs{display:flex;flex-wrap:wrap;gap:5px;padding:10px;border-bottom:1px solid var(--line)}
+.tabs button{padding:4px 11px;font-size:13px;border-radius:4px;background:var(--bg)}
+.tabs button[aria-selected="true"]{border-color:var(--brass);color:var(--brass);font-weight:600}
+.panel .controls{flex:1;overflow:auto;padding:2px 14px 14px;display:block}
+.panel .controls fieldset{border:0;background:none;padding:0}
+.panel .controls legend{display:none}
+.panel .export{margin:0;padding:10px 14px;border-top:1px solid var(--line)}
+.panel textarea{margin:0;border-radius:0;border-width:1px 0 0;max-height:30vh}
+@media (max-width:900px){.studio{grid-template-columns:1fr}.panel{position:static;max-height:none}}
 header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin-bottom:12px}
 h1{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:500;font-size:clamp(1.6rem,3.4vw,2.3rem);margin:0;letter-spacing:.01em}
 header p{margin:0;color:var(--muted)}
-.stage{position:relative;border-radius:4px;overflow:hidden;background:#08080b;aspect-ratio:16/9;touch-action:none}
+.stage{position:relative;border-radius:4px;overflow:hidden;background:#08080b;aspect-ratio:16/9;touch-action:none;width:min(100%,calc((100vh - 250px)*16/9));min-width:min(100%,480px);margin:0 auto}
 .stage canvas{display:block;width:100%!important;height:100%!important}
 .err{position:absolute;inset:0;display:grid;place-items:center;color:#bbb;padding:20px;text-align:center}
 .transport{display:flex;align-items:center;gap:12px;margin:12px 0 4px}
@@ -35,7 +48,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:118px;white-space:nowrap}
 input[type=range]{accent-color:var(--brass);width:100%}
 .scrub{flex:1}
-.readout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0 22px}
+.readout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0 0}
 .meter{font-size:13px;color:var(--muted)}
 .meter b{display:block;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
 .bar{height:3px;background:var(--track);border-radius:2px;margin-top:5px;overflow:hidden}
@@ -78,6 +91,8 @@ textarea{width:100%;min-height:140px;margin-top:10px;font:12px/1.4 ui-monospace,
     <h1>__TITLE__</h1>
     <p>__SUBTITLE__</p>
   </header>
+  <div class="studio">
+  <div class="view">
   <div class="stage" id="stage" aria-label="Animated actors moving with the music"></div>
   <div class="transport">
     <button class="play" id="play">Play</button>
@@ -96,12 +111,17 @@ textarea{width:100%;min-height:140px;margin-top:10px;font:12px/1.4 ui-monospace,
     <div class="meter">Count in bar<b id="mB">1</b><div class="dots" id="dots"></div></div>
     <div class="meter">Section<b id="mS">–</b></div>
   </div>
-  <div class="controls" id="controls"></div>
-  <div class="export">
-    <button id="copy">Copy settings</button>
-    <span id="copied">These become this track's config for the final render.</span>
   </div>
-  <textarea id="cfg" readonly aria-label="Settings as JSON"></textarea>
+  <aside class="panel" aria-label="Settings">
+    <div class="tabs" id="tabs" role="tablist" aria-label="Settings categories"></div>
+    <div class="controls" id="controls"></div>
+    <div class="export">
+      <button id="copy">Copy settings</button>
+      <span id="copied">These become this track's config for the final render.</span>
+    </div>
+    <textarea id="cfg" readonly aria-label="Settings as JSON"></textarea>
+  </aside>
+  </div>
   <audio id="au" preload="auto" src="__AUDIO__"></audio>
 </main>
 <script>

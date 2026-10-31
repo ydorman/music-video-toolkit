@@ -1,3 +1,16 @@
+// ---------- settings panel: one tab per category (the fieldsets core.js builds), so only one group of controls shows
+(function(){
+  const tabs=document.getElementById('tabs'), sets=[...document.querySelectorAll('#controls>fieldset')];
+  let cur=0; try{ cur=Math.min(sets.length-1,Math.max(0,+(localStorage.getItem('previewTab')||0))); }catch(e){}
+  const show=i=>{ cur=i; sets.forEach((f,k)=>{ f.hidden=k!==i; tabs.children[k].setAttribute('aria-selected',k===i?'true':'false'); tabs.children[k].tabIndex=k===i?0:-1; });
+    try{ localStorage.setItem('previewTab',i); }catch(e){} };
+  sets.forEach((f,k)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.id='tab'+k;
+    f.setAttribute('role','tabpanel'); f.setAttribute('aria-labelledby',b.id);
+    b.textContent=(f.querySelector('legend')||{}).textContent||('Group '+(k+1)); b.onclick=()=>show(k);
+    b.onkeydown=e=>{ if(e.key==='ArrowRight'||e.key==='ArrowLeft'){ e.preventDefault(); e.stopPropagation(); const n=(cur+(e.key==='ArrowRight'?1:-1)+sets.length)%sets.length; show(n); tabs.children[n].focus(); } };
+    tabs.appendChild(b); });
+  if(sets.length) show(cur);
+})();
 // ---------- transport
 const playBtn=document.getElementById('play'), scrub=document.getElementById('scrub'), timeEl=document.getElementById('time');
 let dragging=false;

@@ -63,7 +63,8 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   first, the pelvis riding highest over the standing leg; walking brings the dancer down off releve and drops leg
   gestures. Keep travel lyrical: about 6 m takes 3 bars (about 0.6 m/s at most).
 - Personal space: wherever two dancers would come closer than their bodies and poses allow (a torso leaning toward
-  the other, a leg reaching toward them), their positions are pushed apart, smoothly over about 2 s. An arm meeting
+  the other, a leg reaching toward them, arms reaching out - shoulder to fingertips), their positions are pushed apart,
+  smoothly over about 2 s. So two dancers reaching toward each other stop with their hands just apart (an almost-touch). An arm meeting
   another body rests on its surface instead of passing through.
 - **Holds** (`choreography.json` `holds`): partners holding hands. `{at, bars (default 1), pair: [a, b], hands, height,
   turn, blend}`. `hands`: `"near"` (default: the hands on the sides facing each other over the hold), `"both"` (facing,
@@ -89,8 +90,14 @@ out on turns and quick moves; 0 = off, the default), `sleeve_fullness` (robe onl
   speed) and drops within about a second after; a knee reaching forward or out pushes it just enough to stay covered.
 - Off stage: a dancer whose position is beyond 1.3x the clearing (scene `clearing_m`) is hidden in the forest, so
   entrances and exits are just timeline travel to or from such a spot.
+- Preview layout: the clip, transport, sections and meters on the left; the settings in a panel on the right that
+  stays in view, one tab per group (Scene, Light, Color, ...), so a setting and its effect on the clip are both visible.
 - Preview: the ◀ ▶ buttons (or , . and the arrow keys; shift = 1 s) step one frame (1/30 s) and pause; the clock
   then shows the frame number, so a faulty frame can be named exactly.
+- Check contact: `python3 toolkit/tools/check_contact.py build/<clip> [--fps 10]` skins every dancer's real body and
+  clothing meshes and lists wherever two dancers' surfaces come within 1.5 cm, naming the parts (hand / torso, leg / leg,
+  skirt ...). It sees what the capsule checks below miss; partners in these clips should never touch, so expect none.
+  It does not test a dancer against their own body (an arm through one's own torso, a leg through one's own skirt).
 - Check every clip after choreography changes: `python3 toolkit/tools/check_motion.py build/<clip>` samples all
   dancers at 30 fps (no rendering) and lists what a real dancer couldn't do: airborne (no foot on the floor), skate
   (a planted foot sliding), overreach (a leg too short for its target), spin/snap (turning too fast or reversing in a

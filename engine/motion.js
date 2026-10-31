@@ -179,13 +179,22 @@ function holdTargets(t){   // {dancer index + bone side: {T: where the wrist goe
 // pushed apart - smoothly, starting before it is needed - and everything else (feet, turns) follows the pushed path.
 const SEP_DT=1/30, BODY_R=0.17;
 let SEP=null;
-function reachToward(z,yaw,dx,dz,walk){   // metres the body reaches from its centre toward the unit direction (dx,dz)
-  if(!z) return BODY_R; if(walk) return BODY_R+0.05;   // walking drops leg gestures and straightens up
+const _yq=new THREE.Quaternion(), _Y=new THREE.Vector3(0,1,0);
+function armReach(z,yaw,dx,dz,i){   // how far the arms reach toward (dx,dz): shoulder, upper arm, forearm and hand, plus the arm's thickness
+  _yq.setFromAxisAngle(_Y,yaw); let e=0;
+  [1,-1].forEach(s=>{ const [up,fo]=armDirs(s,armOf(s===1?z.R:z.L),PERS[i],_yq);   // bone L (s=1) takes the pose's R entry, as in animate()
+    const x=0.18*s*Math.cos(yaw)+up.x*0.29+fo.x*0.4, zz=-0.18*s*Math.sin(yaw)+up.z*0.29+fo.z*0.4;
+    e=Math.max(e,x*dx+zz*dz+0.05); });
+  return e;
+}
+function reachToward(z,yaw,dx,dz,walk,i){   // metres the body reaches from its centre toward the unit direction (dx,dz)
+  if(!z) return BODY_R; const arms=i===undefined?0:armReach(z,yaw,dx,dz,i);
+  if(walk) return Math.max(BODY_R+0.05,arms);   // walking drops leg gestures and straightens up (the arms still reach)
   const f=[Math.sin(yaw),Math.cos(yaw)], df=f[0]*dx+f[1]*dz, ds=Math.abs(f[1]*dx-f[0]*dz), lean=clamp((z.torso[0]+z.pitch)/90,-1,1)*Math.PI/2;
   let e=BODY_R+(lean>0?Math.max(0,df)*0.55*Math.sin(lean):Math.max(0,-df)*0.4*Math.sin(-lean));
   [z.legL,z.legR].forEach(g=>{ if(g[1]<10) return; const h=0.9*Math.sin(Math.min(g[1],90)*D)*(1-0.42*g[2]), c=Math.cos(g[0]*D)*df+Math.abs(Math.sin(g[0]*D))*ds;
     e=Math.max(e,0.06+h*Math.max(0,c)); });
-  return e;
+  return Math.max(e,arms);
 }
 function separation(){
   const IDX=CFG.map((c,i)=>i).filter(i=>TLD[i]), t0=-2, n=Math.ceil((F.duration+8)/SEP_DT)+1, C={};
@@ -195,7 +204,7 @@ function separation(){
       const a=tlPos(i,t-0.4), b=tlPos(i,t+0.4); Wk[i]=Math.hypot(b[0]-a[0],b[1]-a[1])/0.8>0.12; });
     for(let a=0;a<IDX.length;a++) for(let b=a+1;b<IDX.length;b++){ const i=IDX[a], j=IDX[b];
       let dx=P[j][0]-P[i][0], dz=P[j][1]-P[i][1], d=Math.hypot(dx,dz); if(d>2.5) continue; if(d<1e-4){ dx=1; dz=0; d=1e-4; }
-      const ux=dx/d, uz=dz/d; let need=reachToward(Z[i],Y[i],ux,uz,Wk[i])+reachToward(Z[j],Y[j],-ux,-uz,Wk[j])+0.05;
+      const ux=dx/d, uz=dz/d; let need=reachToward(Z[i],Y[i],ux,uz,Wk[i],i)+reachToward(Z[j],Y[j],-ux,-uz,Wk[j],j)+0.05;
       HOLDS.forEach(h=>{ if(((h.ia===i&&h.ib===j)||(h.ia===j&&h.ib===i)) && holdW(h,t)>0) need=clamp(need,h.minD,h.maxD-0.08); });   // holding hands: never pushed out of reach, never so close the shoulders collide
       if(d<need){ const p=(need-d)/2; C[i][0][k]-=ux*p; C[i][1][k]-=uz*p; C[j][0][k]+=ux*p; C[j][1][k]+=uz*p; }
       HOLDS.forEach(h=>{ if(!((h.ia===i&&h.ib===j)||(h.ia===j&&h.ib===i))) return; const w=holdW(h,t);   // holding hands: within reach
