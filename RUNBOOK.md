@@ -196,7 +196,10 @@ You play with the sliders, press **Copy settings** and paste the JSON into the c
 - **Paste settings** applies settings text copied earlier (the whole copied JSON, its "mapping", or just part of it -
   only what it names changes).
 - Visual offset and Downbeat position apply instantly (the dance and scene are drawn shifted against the audio);
-  Transition length re-simulates the motion (~2 s), once, after the slider rests.
+  Transition length and Smallest step re-simulate the motion (~2 s), once, after the slider rests.
+- Smallest step (Movement; look.json "stepping": {"smallest_step_m"}, default 0.2 m): a planted foot stays until the
+  body has moved that far from where it should stand, so slow travel takes fewer, longer strides and small drifts
+  (personal space, sway) no longer turn into shuffling in place. Lower = more, smaller steps.
 
 ## 5. Render (your Mac)
 Claude hands you `build/<clip>/renderer.html`. Open it in Chrome and keep the tab in front.

@@ -117,9 +117,9 @@ const MDT=1/60, TURN_MAX=150*D, TURN_ACC=320*D, STEP_ERR=0.09, LIFT=0.05;
 const OFFSTAGE=1.3;
 const HAND_C=0.07, PALM=0.017;   // holding hands: grip centre from the wrist joint, half a hand's thickness
 const KNEE_R=0.055, ANKLE_R=0.065, HIP_MIN=0.12, ELBOW_R=0.045, WRIST_R=0.035;   // floor work: joint heights when resting on the floor
-let MOT=null, MOT_KEY='', MOT_SHARP=P.sharp, motTimer=0;
-// the transition length reshapes the travel, so the track is simulated again (~2 s) - once, after the slider rests
-function scheduleMotion(){ clearTimeout(motTimer); motTimer=setTimeout(()=>{ MOT_SHARP=P.sharp; if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); },400); }
+let MOT=null, MOT_KEY='', MOT_SHARP=[P.sharp,P.stepMin].join(), motTimer=0;
+// the transition length (and the smallest step) reshape the travel and the steps, so the track is simulated again (~2 s) - once, after the slider rests
+function scheduleMotion(){ clearTimeout(motTimer); motTimer=setTimeout(()=>{ MOT_SHARP=[P.sharp,P.stepMin].join(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); },400); }
 const _rotXZ=(x,z,a)=>[x*Math.cos(a)+z*Math.sin(a), -x*Math.sin(a)+z*Math.cos(a)];
 // ---------- holds (choreography.json "holds"): partners holding hands. Each entry {at, bars (default 1), pair: [a, b],
 // hands: "near" (default: each the hand nearer the other) | "both" (facing, two hands) | [a's hand, b's hand] ("left" /
@@ -255,7 +255,7 @@ function motionTrack(i){
     F2.forEach((f,si)=>{ if(f.sw){ const u=(t-f.sw.t0)/(f.sw.t1-f.sw.t0);
         if(u>=1){ f.x=f.sw.tx; f.z=f.sw.tz; f.yaw=M.yaw[k]; f.sw=null; f.last=t; } }
       if(g[si]>0.9 && !f.sw){ const p=ds(si,k); f.x=p[0]; f.z=p[1]; f.yaw=M.yaw[k]; } });
-    if(!F2[0].sw && !F2[1].sw && !pivot(k)){ let best=-1, be=M.mv[k]>0.5?0.05:STEP_ERR;   // walking: step early and often (short strides)
+    if(!F2[0].sw && !F2[1].sw && !pivot(k)){ let best=-1, be=M.mv[k]>0.5?Math.max(0.05,P.stepMin*0.8):Math.max(STEP_ERR,P.stepMin);   // a foot stays until the body has left it ("Smallest step"); walking a little sooner
       F2.forEach((f,si)=>{ const o=1-si; if(g[si]>0.9 || gAhead(o,k,Math.round(1.1/MDT))>0.02 || t-F2[o].last<0.12 || t-f.last<0.2) return;   // weight onto a foot before lifting the other; a foot that just landed stays
         const p=ds(si,k+Math.round(0.4/MDT)), err=Math.hypot(p[0]-f.x,p[1]-f.z)+0.12*Math.abs(angDiff(f.yaw,M.yaw[k]))-(f.last>F2[o].last?0.2:0);   // feet alternate
         if(err>be){ be=err; best=si; } });

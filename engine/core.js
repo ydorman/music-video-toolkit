@@ -8,7 +8,7 @@ function lookToP(L){ const m=(L&&L.mapping)||{}, g=(o,k,d)=>(o&&o[k]!==undefined
     hueDark:g(m['brightness->hue'],'dark',30), hueBright:g(m['brightness->hue'],'bright',248), tint:g(m['brightness->hue'],'tint',0.45),
     haze:g(m,'noisiness->haze',0.5),
     posBars:g(m['bar->position'],'bars_per_position',1), sharp:g(m['bar->position'],'transition',0.35),
-    step:g(m['bar->step'],'size_m',0.18), turnPos:g(m,'turn_during_position',1),
+    step:g(m['bar->step'],'size_m',0.18), stepMin:g(m.stepping,'smallest_step_m',0.2), turnPos:g(m,'turn_during_position',1),
     fadeIn:g(m.start_end,'fade_in_s',6), outStart:g(m.start_end,'ending_starts_s',F.ending_suggestion||F.duration-10), outLen:g(m.start_end,'ending_length_s',10),
     skirt:g(m.robe,'skirt_shape',0.3), sleeve:g(m.robe,'sleeve_fullness',0.4), swing:g(m.robe,'skirt_swing',0), sashTint:g(m.robe,'sash_tint',0.6),
     accent:g(m,'downbeat->dip',0.5), loose:g(m,'sync_looseness_s',0.05),
@@ -20,7 +20,7 @@ function lookToP(L){ const m=(L&&L.mapping)||{}, g=(o,k,d)=>(o&&o[k]!==undefined
 function pToLook(){ return {track:TRACK.title, meter:TRACK.meter, pulse_bpm:TRACK.pulse_bpm, actors:PEOPLE_DATA.length, positions:CHOREO.positions.map(s=>s.name),
   mapping:{ "loudness->light":{base:P.dim, response:P.resp}, "brightness->hue":{dark:P.hueDark, bright:P.hueBright, tint:P.tint},
     "noisiness->haze":P.haze, "bar->position":{bars_per_position:P.posBars, transition:P.sharp},
-    "bar->step":{size_m:P.step, pattern:CHOREO.step_pattern_name||'custom'}, turn_during_position:P.turnPos,
+    "bar->step":{size_m:P.step, pattern:CHOREO.step_pattern_name||'custom'}, stepping:{smallest_step_m:P.stepMin}, turn_during_position:P.turnPos,
     start_end:{fade_in_s:P.fadeIn, ending_starts_s:P.outStart, ending_length_s:P.outLen},
     robe:{skirt_shape:P.skirt, sleeve_fullness:P.sleeve, skirt_swing:P.swing, sash_tint:P.sashTint}, "downbeat->dip":P.accent, sync_looseness_s:P.loose,
     downbeat_shift:P.shift, visual_offset_ms:P.offsetMs, colors:costumeColors(),
@@ -61,6 +61,7 @@ const GROUPS = [
   { name:'Movement', items:[
     {k:'posBars', label:'Length of each position', options:[[1,'1 bar'],[2,'2 bars']]},
     {k:'sharp', label:'Transition length', min:0.08, max:1, step:0.01, hint:'Short = sudden and held, long = flowing'},
+    {k:'stepMin', label:'Smallest step', min:0.05, max:0.4, step:0.01, fmt:v=>Math.round(v*100)+' cm', hint:'Feet stay planted until the body has moved this far from them: higher = fewer, longer steps and less stepping in place (re-simulates the movement when you let go)'},
     {k:'step', label:'Step size', min:0, max:0.35, step:0.01, fmt:v=>Math.round(v*100)+' cm', hint:'One step per bar, pattern set in choreography.json'},
     {k:'turnPos', label:'Full turn during', options:[[0,'No turn'],...CHOREO.positions.map((s,i)=>[i+1,'Position '+(i+1)+' ('+s.name+')'])]},
     {k:'loose', label:'Sync looseness', min:0, max:0.2, step:0.005, fmt:v=>Math.round(v*1000)+' ms', hint:'Tiny lag between dancers'},
@@ -90,7 +91,7 @@ GROUPS.forEach(g=>{
       const f=it.fmt||fmtNum;
       d.innerHTML=`<label for="${id}"><span>${it.label}</span><output id="o_${it.k}">${f(P[it.k])}</output></label>`;
       const r=document.createElement('input'); r.type='range'; r.id=id; r.min=it.min; r.max=it.max; r.step=it.step; r.value=P[it.k];
-      r.oninput=()=>{P[it.k]=+r.value; document.getElementById('o_'+it.k).textContent=f(P[it.k]); updCfg(); lookChanged(); if(it.k==='sharp') scheduleMotion();};
+      r.oninput=()=>{P[it.k]=+r.value; document.getElementById('o_'+it.k).textContent=f(P[it.k]); updCfg(); lookChanged(); if(it.k==='sharp'||it.k==='stepMin') scheduleMotion();};
       d.appendChild(r);
       if(it.hint){const sm=document.createElement('small'); sm.textContent=it.hint; d.appendChild(sm);}
     }
@@ -118,12 +119,12 @@ function costumeColors(){ const o={}; PEOPLE_DATA.forEach(p=>{ const c=p.meta.cf
   cbox.appendChild(fs);
 })();
 // set every setting from a look (pasted, or the clip's look.json on reset) and bring the controls in line
-function applyLook(L){ const sharp=P.sharp; Object.assign(P,lookToP(L));
+function applyLook(L){ const mk=[P.sharp,P.stepMin].join(); Object.assign(P,lookToP(L));
   GROUPS.forEach(g=>g.items.forEach(it=>{ const el=document.getElementById('c_'+it.k); if(el) el.value=P[it.k];
     const o=document.getElementById('o_'+it.k); if(o) o.textContent=(it.fmt||fmtNum)(P[it.k]); }));
   const cc=costumeColors(); document.querySelectorAll('#controls input[type=color]').forEach(inp=>{ const v=cc[inp.dataset.spot]; if(v&&v[inp.dataset.k]) inp.value=v[inp.dataset.k].toLowerCase(); });
   PEOPLE_DATA.forEach((p,i)=>applyCostumeColor(i)); updCfg();
-  if(P.sharp!==sharp) scheduleMotion(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); }
+  if([P.sharp,P.stepMin].join()!==mk) scheduleMotion(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); }
 const dots=document.getElementById('dots'); for(let i=0;i<CPB;i++) dots.appendChild(document.createElement('span'));
 
 // ---------- helpers
