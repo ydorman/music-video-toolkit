@@ -66,6 +66,7 @@ legend{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-siz
 select{font:inherit;width:100%;margin-top:4px;padding:5px 8px;border-radius:4px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .export{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .export span{color:var(--muted);font-size:13px}
+.lookSrc{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 textarea{width:100%;min-height:140px;margin-top:10px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:10px;display:none}
 .secrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:6px 0 2px}
 .seclabel{color:var(--muted);font-size:13px}
@@ -117,9 +118,12 @@ textarea{width:100%;min-height:140px;margin-top:10px;font:12px/1.4 ui-monospace,
     <div class="controls" id="controls"></div>
     <div class="export">
       <button id="copy">Copy settings</button>
+      <button id="paste">Paste settings</button>
       <span id="copied">These become this track's config for the final render.</span>
+      <div class="lookSrc"><span id="lookSrc"></span><button id="lookReset" hidden>Reset to the clip's settings</button></div>
     </div>
     <textarea id="cfg" readonly aria-label="Settings as JSON"></textarea>
+    <div class="export" id="pasteRow" style="display:none"><button id="pasteApply">Apply pasted settings</button><button id="pasteCancel">Cancel</button></div>
   </aside>
   </div>
   <audio id="au" preload="auto" src="__AUDIO__"></audio>

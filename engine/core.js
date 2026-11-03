@@ -25,7 +25,13 @@ function pToLook(){ return {track:TRACK.title, meter:TRACK.meter, pulse_bpm:TRAC
     robe:{skirt_shape:P.skirt, sleeve_fullness:P.sleeve, skirt_swing:P.swing, sash_tint:P.sashTint}, "downbeat->dip":P.accent, sync_looseness_s:P.loose,
     downbeat_shift:P.shift, visual_offset_ms:P.offsetMs, colors:costumeColors(),
     ...(OUTDOOR?{scene:{daylight:P.sDay, shafts:P.sShafts, sweep:P.sSweep, foliage_glow:P.sGlow, mist:P.sMist, particles:P.sParticles, warmth:P.sWarm}}:{}) } }; }
-const P = lookToP(LOOK);
+// the preview keeps the settings you set (saved in this browser on every change, kept across rebuilds and republishes)
+// until you reset them to the clip's look.json; the renderer always uses look.json
+const LOOK_KEY='look:'+TRACK.title;
+const SAVED_LOOK=(()=>{ if(typeof PREVIEW==='undefined') return null; try{ const s=localStorage.getItem(LOOK_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } })();
+const P = lookToP(SAVED_LOOK||LOOK);
+function lookChanged(){ if(typeof PREVIEW==='undefined') return; try{ localStorage.setItem(LOOK_KEY,JSON.stringify(pToLook())); }catch(e){}
+  if(typeof showLookSource==='function') showLookSource(true); }
 const CPB = TRACK.counts_per_bar||7;          // counts (detected pulses) per bar
 const fmtMS=v=>Math.floor(v/60)+':'+String((v%60).toFixed(1)).padStart(4,'0');
 
@@ -79,12 +85,12 @@ GROUPS.forEach(g=>{
       d.innerHTML=`<label for="${id}">${it.label}</label>`;
       const s=document.createElement('select'); s.id=id;
       it.options.forEach(([v,tx])=>{const o=document.createElement('option');o.value=v;o.textContent=tx;if(v==P[it.k])o.selected=true;s.appendChild(o);});
-      s.onchange=()=>{P[it.k]=+s.value;updCfg();}; d.appendChild(s);
+      s.onchange=()=>{P[it.k]=+s.value;updCfg();lookChanged();}; d.appendChild(s);
     } else {
       const f=it.fmt||fmtNum;
       d.innerHTML=`<label for="${id}"><span>${it.label}</span><output id="o_${it.k}">${f(P[it.k])}</output></label>`;
       const r=document.createElement('input'); r.type='range'; r.id=id; r.min=it.min; r.max=it.max; r.step=it.step; r.value=P[it.k];
-      r.oninput=()=>{P[it.k]=+r.value; document.getElementById('o_'+it.k).textContent=f(P[it.k]); updCfg();};
+      r.oninput=()=>{P[it.k]=+r.value; document.getElementById('o_'+it.k).textContent=f(P[it.k]); updCfg(); lookChanged(); if(it.k==='sharp') scheduleMotion();};
       d.appendChild(r);
       if(it.hint){const sm=document.createElement('small'); sm.textContent=it.hint; d.appendChild(sm);}
     }
@@ -104,12 +110,20 @@ function costumeColors(){ const o={}; PEOPLE_DATA.forEach(p=>{ const c=p.meta.cf
     [['cloth','Cloth'],...(c.sash?[['sash','Sash']]:[])].forEach(([k,lab])=>{
       const l=document.createElement('label'); l.className='swatch'; l.textContent=lab+' ';
       const inp=document.createElement('input'); inp.type='color'; inp.value=cur[k].toLowerCase(); inp.setAttribute('aria-label',c.spot+' '+lab);
-      inp.oninput=()=>{ (P.colors[c.spot]=P.colors[c.spot]||{})[k]=inp.value; applyCostumeColor(i); updCfg(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); };
+      inp.dataset.spot=c.spot; inp.dataset.k=k;
+      inp.oninput=()=>{ (P.colors[c.spot]=P.colors[c.spot]||{})[k]=inp.value; applyCostumeColor(i); updCfg(); lookChanged(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); };
       l.appendChild(inp); d.appendChild(l); });
     fs.appendChild(d); });
   const h=document.createElement('div'); h.className='ctl'; h.innerHTML='<small>Men\u2019s sashes take their partner\u2019s colour (choreography.json partners).</small>'; fs.appendChild(h);
   cbox.appendChild(fs);
 })();
+// set every setting from a look (pasted, or the clip's look.json on reset) and bring the controls in line
+function applyLook(L){ const sharp=P.sharp; Object.assign(P,lookToP(L));
+  GROUPS.forEach(g=>g.items.forEach(it=>{ const el=document.getElementById('c_'+it.k); if(el) el.value=P[it.k];
+    const o=document.getElementById('o_'+it.k); if(o) o.textContent=(it.fmt||fmtNum)(P[it.k]); }));
+  const cc=costumeColors(); document.querySelectorAll('#controls input[type=color]').forEach(inp=>{ const v=cc[inp.dataset.spot]; if(v&&v[inp.dataset.k]) inp.value=v[inp.dataset.k].toLowerCase(); });
+  PEOPLE_DATA.forEach((p,i)=>applyCostumeColor(i)); updCfg();
+  if(P.sharp!==sharp) scheduleMotion(); if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); }
 const dots=document.getElementById('dots'); for(let i=0;i<CPB;i++) dots.appendChild(document.createElement('span'));
 
 // ---------- helpers

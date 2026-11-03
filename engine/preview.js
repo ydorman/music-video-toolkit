@@ -77,10 +77,31 @@ window.__renderAt=t=>{ frozen=true; lastT=null; animate(t); };
 // ---------- settings export
 const cfgEl=document.getElementById('cfg');
 function config(){ return pToLook(); }
-function updCfg(){ cfgEl.value=JSON.stringify(config(),null,2); }
+function updCfg(){ if(!cfgEl.readOnly) return; cfgEl.value=JSON.stringify(config(),null,2); }
 updCfg();
+// where the settings come from: the clip's look.json, or the ones you set here (kept in this browser)
+const srcEl=document.getElementById('lookSrc'), resetBtn=document.getElementById('lookReset'), copiedEl=document.getElementById('copied');
+function showLookSource(own){ srcEl.textContent=own?'Using your saved settings (kept in this browser).':'Using the clip\u2019s settings (look.json).'; resetBtn.hidden=!own; }
+showLookSource(!!SAVED_LOOK);
+resetBtn.onclick=()=>{ try{ localStorage.removeItem(LOOK_KEY); }catch(e){} applyLook(LOOK); showLookSource(false); copiedEl.textContent='Back to the clip\u2019s settings.'; };
+// paste: settings copied earlier (or edited by hand) - the whole copied text, or just its "mapping"
+const pasteRow=document.getElementById('pasteRow');
+function endPaste(){ cfgEl.readOnly=true; pasteRow.style.display='none'; cfgEl.style.display='none'; updCfg(); }
+document.getElementById('paste').onclick=async()=>{
+  cfgEl.readOnly=false; cfgEl.value=''; cfgEl.placeholder='Paste settings here'; cfgEl.style.display='block'; pasteRow.style.display=''; cfgEl.focus();
+  copiedEl.textContent='Paste the settings into the box, then apply them.';
+  try{ const tx=await navigator.clipboard.readText(); if(tx&&tx.trim().startsWith('{')) cfgEl.value=tx; }catch(e){} };
+document.getElementById('pasteCancel').onclick=()=>{ endPaste(); copiedEl.textContent='Nothing changed.'; };
+document.getElementById('pasteApply').onclick=()=>{
+  let L; try{ L=JSON.parse(cfgEl.value); }catch(e){ copiedEl.textContent='That isn\u2019t valid settings text ('+e.message+').'; return; }
+  if(!L||typeof L!=='object'){ copiedEl.textContent='That isn\u2019t settings text.'; return; }
+  if(!L.mapping) L={mapping:L};
+  const cur=pToLook().mapping, m={...cur};   // only what the pasted text names changes
+  for(const k in L.mapping){ const v=L.mapping[k]; m[k]=(v&&typeof v==='object'&&!Array.isArray(v)&&cur[k]&&typeof cur[k]==='object')?{...cur[k],...v}:v; }
+  L={mapping:m};
+  endPaste(); applyLook(L); lookChanged(); copiedEl.textContent='Settings applied and saved in this browser.'; };
 document.getElementById('copy').onclick=async()=>{
-  updCfg(); cfgEl.style.display='block';
+  endPaste(); cfgEl.style.display='block';
   try{ await navigator.clipboard.writeText(cfgEl.value); document.getElementById('copied').textContent='Copied. Paste it into the chat when you\u2019re happy with a look.'; }
   catch(e){ cfgEl.select(); document.getElementById('copied').textContent='Select the text below and copy it.'; }
 };

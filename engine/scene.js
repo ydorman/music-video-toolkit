@@ -334,7 +334,7 @@ if(SCENE.environment&&SCENE.environment!=='studio') (function buildOutdoor(){
   ENV.update=(t,a)=>{
     const k=KF(t), JP={daylight:P.sDay, shafts:P.sShafts, sweep:P.sSweep, leafGlow:P.sGlow, mist:P.sMist, particles:P.sParticles, warmth:P.sWarm};
     // slow the brightness so the sweep reads as a sweep, not a flicker (stateless: a short window average)
-    let cs=0; for(let i=-6;i<=6;i++) cs+=feat('cent',Math.max(0,t+i*0.08)); cs/=13;
+    let cs=0; for(let i=-6;i<=6;i++) cs+=feat('cent',Math.max(0,a.ta+i*0.08)); cs/=13;
     const day=clamp(k.day*JP.daylight,0,1.2);
     const sky=day<0.5?NIGHT.clone().lerp(DAWN,day/0.5):DAWN.clone().lerp(DAY,clamp((day-0.5)/0.5));
     sky.lerp(COOL,k.cool*0.8).lerp(WARM,k.warm*0.35);

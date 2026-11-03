@@ -190,6 +190,13 @@ Claude publishes `build/<clip>/preview.html` as an artifact (must stay under 16 
 ## 4. Tune
 You play with the sliders, press **Copy settings** and paste the JSON into the chat. Claude saves it verbatim as
 `clips/<clip>/look.json`, rebuilds, republishes. Repeat with actors/choreography as needed.
+- The preview keeps your settings: every change is saved in that browser and survives rebuilds and republishes,
+  overriding the clip's look.json until **Reset to the clip's settings** (the panel says which is in use). The
+  renderer always uses look.json, so settings reach the final video only through Copy settings → chat.
+- **Paste settings** applies settings text copied earlier (the whole copied JSON, its "mapping", or just part of it -
+  only what it names changes).
+- Visual offset and Downbeat position apply instantly (the dance and scene are drawn shifted against the audio);
+  Transition length re-simulates the motion (~2 s), once, after the slider rests.
 
 ## 5. Render (your Mac)
 Claude hands you `build/<clip>/renderer.html`. Open it in Chrome and keep the tab in front.

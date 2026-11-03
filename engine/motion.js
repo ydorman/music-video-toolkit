@@ -117,7 +117,9 @@ const MDT=1/60, TURN_MAX=150*D, TURN_ACC=320*D, STEP_ERR=0.09, LIFT=0.05;
 const OFFSTAGE=1.3;
 const HAND_C=0.07, PALM=0.017;   // holding hands: grip centre from the wrist joint, half a hand's thickness
 const KNEE_R=0.055, ANKLE_R=0.065, HIP_MIN=0.12, ELBOW_R=0.045, WRIST_R=0.035;   // floor work: joint heights when resting on the floor
-let MOT=null, MOT_KEY='';
+let MOT=null, MOT_KEY='', MOT_SHARP=P.sharp, motTimer=0;
+// the transition length reshapes the travel, so the track is simulated again (~2 s) - once, after the slider rests
+function scheduleMotion(){ clearTimeout(motTimer); motTimer=setTimeout(()=>{ MOT_SHARP=P.sharp; if(typeof frozen!=='undefined'&&frozen) animate(au.currentTime||0); },400); }
 const _rotXZ=(x,z,a)=>[x*Math.cos(a)+z*Math.sin(a), -x*Math.sin(a)+z*Math.cos(a)];
 // ---------- holds (choreography.json "holds"): partners holding hands. Each entry {at, bars (default 1), pair: [a, b],
 // hands: "near" (default: each the hand nearer the other) | "both" (facing, two hands) | [a's hand, b's hand] ("left" /
@@ -288,7 +290,7 @@ function motionTrack(i){
   return M;
 }
 function motionAt(i,t){
-  const key=[P.offsetMs,P.shift,P.sharp].join();
+  const key=String(MOT_SHARP);
   if(!MOT || key!==MOT_KEY){ MOT_KEY=key; SEP=null; MOT=CFG.map((c,j)=>TLD[j]?motionTrack(j):null); }
   const M=MOT[i], q=clamp((t-M.t0)/MDT,0,M.n-1.001), k=Math.floor(q), u=q-k, at=a=>a[k]+(a[k+1]-a[k])*u;
   return {px:at(M.px),pz:at(M.pz),yaw:at(M.yaw),mv:at(M.mv),x:M.x.map(at),z:M.z.map(at),lift:M.lift.map(at),ph:M.ph.map(a=>a[k+(u>0.5?1:0)]),sx:at(M.sx),sz:at(M.sz),hx:at(M.hx),hz:at(M.hz),fl:at(M.fl)};
@@ -401,7 +403,7 @@ const PARTNERS=(CHOREO.partners||[]).map(e=>{ const take=CFG.map(()=>null);
       if(SASH_OWN[ib]&&!SASH_OWN[ia]) take[ia]=SASH_OWN[ib]; if(SASH_OWN[ia]&&!SASH_OWN[ib]) take[ib]=SASH_OWN[ia]; });
     return {T:atTime(e.at), dur:(e.blend===undefined?2:e.blend)*CPB*F.beat_period, take}; }).sort((a,b)=>a.T-b.T);
 const _sc=new THREE.Color();
-function applyCostumeColor(i){ const v=P.colors[CFG[i].spot]||{};   // look.json "colors" override actors.csv (set in place, PARTNERS share these objects)
+function applyCostumeColor(i){ const v=costumeColors()[CFG[i].spot]||{};   // look.json "colors" override actors.csv (set in place, PARTNERS share these objects)
   if(v.cloth) dancers[i].robeBase.set(v.cloth); if(v.sash&&SASH_OWN[i]) SASH_OWN[i].set(v.sash); }
 CFG.forEach((c,i)=>applyCostumeColor(i));
 function sashAt(i,t){                 // -> [colour, amount 0..1] or null; a pure function of t
@@ -472,8 +474,17 @@ function floorDir(S,dir,len,minY,fb){   // bend dir (in place) up so a segment o
   return S.clone().addScaledVector(dir,len);
 }
 let lastT=null;
+// visual offset and downbeat position move the whole picture against the audio by one time shift: instead of building
+// everything again, the dance and scene are drawn at the shifted time on the grid they were built with, while the light
+// keeps following the audio at the real time
+const GRID0={shift:P.shift, offsetMs:P.offsetMs};
 function animate(t){
-  const rms=feat('rms',t), cent=feat('cent',t), flat=feat('flat',t), low=feat('low',t), onset=feat('onset',t);
+  const dt=(P.shift-GRID0.shift)*F.beat_period+(P.offsetMs-GRID0.offsetMs)/1000; if(!dt) return animateAt(t,t);
+  const s=P.shift, o=P.offsetMs; P.shift=GRID0.shift; P.offsetMs=GRID0.offsetMs;
+  try{ return animateAt(t-dt,t); } finally{ P.shift=s; P.offsetMs=o; }
+}
+function animateAt(t,ta){
+  const rms=feat('rms',ta), cent=feat('cent',ta), flat=feat('flat',ta), low=feat('low',ta), onset=feat('onset',ta);
   // ---- light and color
   const cA=new THREE.Color().setHSL(P.hueDark/360,0.6,0.6), cB=new THREE.Color().setHSL(P.hueBright/360,0.55,0.62);
   const tintC=cA.clone().lerp(cB,cent);
@@ -483,7 +494,7 @@ function animate(t){
   const fin=P.fadeIn>0?ease(clamp((t-MS)/P.fadeIn)):(t>=MS?1:0);
   const outro=clamp((t-P.outStart)/Math.max(0.1,P.outLen)), oW=ease(clamp(outro*2.2)), oL=ease(outro);
   L*=fin*(1-oL);
-  if(ENV.update) ENV.update(t,{rms,cent,flat,low,onset,L,lightC,tintC,fin,oL});
+  if(ENV.update) ENV.update(t,{rms,cent,flat,low,onset,L,lightC,tintC,fin,oL,ta});
   else {
   backdrop.material.color.copy(lightC).multiplyScalar(0.42*L);
   back.color.copy(lightC); back.intensity=1.8*L;
